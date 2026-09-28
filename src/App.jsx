@@ -10,13 +10,18 @@ import NotFound from './pages/NotFound'
 import { courses as seedCourses } from './data/courses'
 import { enrollments as seedEnrollments } from './data/enrollments'
 import { grades as seedGrades } from './data/grades'
-import { students } from './data/users'
+import { students, users } from './data/users'
 
 // App owns the shared data. Pages read it through props and send changes
 // back up through the handler props (one-way data flow + lifted state).
 function App() {
   // The logged-in user lives in memory only; refreshing logs you out.
-  const [currentUser, setCurrentUser] = useState(null)
+  const [currentUser, setCurrentUser] = useState(() => {
+    const h = window.location.hash
+    if (h.includes('user=admin')) return users.find((u) => u.role === 'administrator') || null
+    if (h.includes('user=student')) return users.find((u) => u.role === 'client') || null
+    return null
+  })
 
   // Seeded from the hardcoded data files, then extended by the forms.
   const [courses] = useState(seedCourses)

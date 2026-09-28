@@ -7,7 +7,7 @@ import Sidebar from '../components/Sidebar'
 // It is the "menu / navigation" page required by the brief.
 function MainLayout({ user, onLogout }) {
   const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(() => window.location.hash.includes('drawer=true'))
 
   function handleToggleSidebar() {
     const isSmallScreen = window.matchMedia('(max-width: 768px)').matches
