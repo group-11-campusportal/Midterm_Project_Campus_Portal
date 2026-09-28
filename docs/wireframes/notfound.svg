@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" role="img" aria-label="Wireframe: 404 not found page">
+  <rect width="520" height="360" fill="#f8fafc"/>
+  <g font-family="system-ui, sans-serif">
+    <rect x="0.5" y="0.5" width="519" height="359" fill="none" stroke="#cbd5e1"/>
+    <rect x="140" y="98" width="240" height="164" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="260" y="168" font-size="44" font-weight="700" fill="#2563eb" text-anchor="middle">404</text>
+    <text x="260" y="196" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">Page not found</text>
+    <text x="260" y="214" font-size="9" fill="#94a3b8" text-anchor="middle">The page you are looking for does not exist.</text>
+    <rect x="196" y="228" width="128" height="24" rx="4" fill="#2563eb"/>
+    <text x="260" y="244" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle">Back to Dashboard</text>
+  </g>
+</svg>
