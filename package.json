@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "University Campus Portal — Grades & Enrollment (Midterm / UTS project, front-end only, hardcoded data).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -18,10 +19,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
-    "oxlint": "^1.85.0",
+    "oxlint": "^1.81.0",
     "vite": "^8.3.0"
-  },
-  "allowScripts": {
-    "fsevents@2.3.3": true
   }
 }

@@ -1,11 +1,23 @@
 import { NavLink } from 'react-router-dom'
 
+// Menu items change with the logged-in role. The same page component
+// renders different content, but the menu itself also differs so that
+// the menu always matches the permission matrix.
 function buildNavItems(role) {
   const isAdministrator = role === 'administrator'
+
   return [
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { to: '/form', label: isAdministrator ? 'Record Grade' : 'Enroll in Course', icon: 'form' },
-    { to: '/output', label: isAdministrator ? 'Grade Records' : 'My Submissions', icon: 'output' },
+    {
+      to: '/form',
+      label: isAdministrator ? 'Record Grade' : 'Enroll in Course',
+      icon: 'form',
+    },
+    {
+      to: '/output',
+      label: isAdministrator ? 'Grade Records' : 'My Submissions',
+      icon: 'output',
+    },
   ]
 }
 
@@ -20,6 +32,7 @@ function NavIcon({ name }) {
       </svg>
     )
   }
+
   if (name === 'form') {
     return (
       <svg className="sidebar__icon" viewBox="0 0 20 20" aria-hidden="true">
@@ -29,6 +42,7 @@ function NavIcon({ name }) {
       </svg>
     )
   }
+
   return (
     <svg className="sidebar__icon" viewBox="0 0 20 20" aria-hidden="true">
       <path d="M4 4.5h12M4 10h12M4 15.5h12" />
@@ -41,6 +55,7 @@ function NavIcon({ name }) {
 
 function Sidebar({ user, className, onNavigate }) {
   const navItems = buildNavItems(user?.role)
+
   return (
     <nav className={className} aria-label="Main menu">
       <ul className="sidebar__nav">
@@ -48,7 +63,9 @@ function Sidebar({ user, className, onNavigate }) {
           <li key={item.to}>
             <NavLink
               to={item.to}
-              className={({ isActive }) => (isActive ? 'sidebar__link active' : 'sidebar__link')}
+              className={({ isActive }) =>
+                isActive ? 'sidebar__link active' : 'sidebar__link'
+              }
               onClick={onNavigate}
             >
               <NavIcon name={item.icon} />

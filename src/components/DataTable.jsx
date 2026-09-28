@@ -1,19 +1,22 @@
-import EmptyState from "./EmptyState";
+import EmptyState from './EmptyState'
 
-// columns: [{ key, label, render? }]
-// rows:    array of objects with a unique `id`
+// A reusable table driven by props:
+//   columns: [{ key, label, render? }]
+//   rows:    array of objects that each contain a unique `id`
+// The row key is always the record `id`, never the array index.
 function DataTable({ columns, rows, emptyTitle, emptyMessage }) {
   if (rows.length === 0) {
-    return <EmptyState title={emptyTitle} message={emptyMessage} />;
+    return <EmptyState title={emptyTitle} message={emptyMessage} />
   }
+
   return (
     <div className="table-wrapper">
       <table className="table">
         <thead>
           <tr>
-            {columns.map((col) => (
-              <th key={col.key} scope="col">
-                {col.label}
+            {columns.map((column) => (
+              <th key={column.key} scope="col">
+                {column.label}
               </th>
             ))}
           </tr>
@@ -21,9 +24,9 @@ function DataTable({ columns, rows, emptyTitle, emptyMessage }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
-              {columns.map((col) => (
-                <td key={col.key}>
-                  {col.render ? col.render(row) : row[col.key]}
+              {columns.map((column) => (
+                <td key={column.key}>
+                  {column.render ? column.render(row) : row[column.key]}
                 </td>
               ))}
             </tr>
@@ -31,6 +34,7 @@ function DataTable({ columns, rows, emptyTitle, emptyMessage }) {
         </tbody>
       </table>
     </div>
-  );
+  )
 }
-export default DataTable;
+
+export default DataTable

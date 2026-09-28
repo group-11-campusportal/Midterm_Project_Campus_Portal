@@ -3,7 +3,12 @@ import logo from '../assets/logo.svg'
 function Navbar({ user, onLogout, onToggleSidebar }) {
   return (
     <header className="navbar">
-      <button type="button" className="navbar__toggle" onClick={onToggleSidebar} aria-label="Toggle menu">
+      <button
+        type="button"
+        className="navbar__toggle"
+        onClick={onToggleSidebar}
+        aria-label="Toggle menu"
+      >
         <svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
           <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>

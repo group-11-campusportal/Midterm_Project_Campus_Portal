@@ -1,3 +1,4 @@
+// A single number with a label. Reused all over the dashboard.
 function StatCard({ label, value, hint }) {
   return (
     <article className="stat-card">
@@ -5,6 +6,7 @@ function StatCard({ label, value, hint }) {
       <strong className="stat-card__value">{value}</strong>
       {hint ? <span className="stat-card__hint">{hint}</span> : null}
     </article>
-  );
+  )
 }
-export default StatCard;
+
+export default StatCard

@@ -3,6 +3,8 @@ import { Outlet } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import Sidebar from '../components/Sidebar'
 
+// The application shell: header + side menu + main content + footer.
+// It is the "menu / navigation" page required by the brief.
 function MainLayout({ user, onLogout }) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -26,10 +28,19 @@ function MainLayout({ user, onLogout }) {
 
   return (
     <div className="app-shell">
-      <Navbar user={user} onLogout={onLogout} onToggleSidebar={handleToggleSidebar} />
+      <Navbar
+        user={user}
+        onLogout={onLogout}
+        onToggleSidebar={handleToggleSidebar}
+      />
 
       <div className="app-body">
-        <Sidebar user={user} className={sidebarClassName} onNavigate={() => setMobileOpen(false)} />
+        <Sidebar
+          user={user}
+          className={sidebarClassName}
+          onNavigate={() => setMobileOpen(false)}
+        />
+
         <main className="content">
           <Outlet />
         </main>

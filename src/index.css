@@ -1,3 +1,18 @@
+/* ============================================================
+   Campus Portal — global stylesheet (plain CSS, no frameworks)
+
+   1. Design tokens
+   2. Reset & base
+   3. Reusable UI (buttons, cards, fields, alerts, badges)
+   4. App shell (navbar, sidebar, content, footer)
+   5. Login
+   6. Dashboard (welcome, stats, layout, profile)
+   7. Table, states (spinner, empty)
+   8. Forms
+   9. 404
+   10. Responsive breakpoints
+   ============================================================ */
+
 /* 1. Design tokens ------------------------------------------ */
 :root {
   --color-bg: #f5f7fb;

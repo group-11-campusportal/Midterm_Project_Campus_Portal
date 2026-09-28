@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
-import StatCard from "../components/StatCard";
-import DataTable from "../components/DataTable";
-import StatusBadge from "../components/StatusBadge";
-import Spinner from "../components/Spinner";
-import { computeGpa } from "../utils/grade";
+import { useEffect, useState } from 'react'
+import StatCard from '../components/StatCard'
+import DataTable from '../components/DataTable'
+import StatusBadge from '../components/StatusBadge'
+import Spinner from '../components/Spinner'
+import { computeGpa } from '../utils/grade'
 
 const enrollmentColumns = [
   {
-    key: "student",
-    label: "Student",
+    key: 'student',
+    label: 'Student',
     render: (row) => (
       <>
         <span className="table__strong">{row.studentName}</span>
@@ -17,8 +17,8 @@ const enrollmentColumns = [
     ),
   },
   {
-    key: "course",
-    label: "Course",
+    key: 'course',
+    label: 'Course',
     render: (row) => (
       <>
         <span className="table__strong">{row.courseCode}</span>
@@ -26,18 +26,18 @@ const enrollmentColumns = [
       </>
     ),
   },
-  { key: "term", label: "Term" },
+  { key: 'term', label: 'Term' },
   {
-    key: "status",
-    label: "Status",
+    key: 'status',
+    label: 'Status',
     render: (row) => <StatusBadge status={row.status} />,
   },
-];
+]
 
 const myEnrollmentColumns = [
   {
-    key: "course",
-    label: "Course",
+    key: 'course',
+    label: 'Course',
     render: (row) => (
       <>
         <span className="table__strong">{row.courseCode}</span>
@@ -45,19 +45,19 @@ const myEnrollmentColumns = [
       </>
     ),
   },
-  { key: "term", label: "Term" },
-  { key: "credits", label: "Credits" },
+  { key: 'term', label: 'Term' },
+  { key: 'credits', label: 'Credits' },
   {
-    key: "status",
-    label: "Status",
+    key: 'status',
+    label: 'Status',
     render: (row) => <StatusBadge status={row.status} />,
   },
-];
+]
 
 const gradeColumns = [
   {
-    key: "course",
-    label: "Course",
+    key: 'course',
+    label: 'Course',
     render: (row) => (
       <>
         <span className="table__strong">{row.courseCode}</span>
@@ -65,12 +65,12 @@ const gradeColumns = [
       </>
     ),
   },
-  { key: "term", label: "Term" },
-  { key: "credits", label: "Credits" },
-  { key: "score", label: "Score" },
+  { key: 'term', label: 'Term' },
+  { key: 'credits', label: 'Credits' },
+  { key: 'score', label: 'Score' },
   {
-    key: "grade",
-    label: "Grade",
+    key: 'grade',
+    label: 'Grade',
     render: (row) => (
       <>
         <span className="table__strong">{row.letter}</span>
@@ -78,16 +78,16 @@ const gradeColumns = [
       </>
     ),
   },
-];
+]
 
 function Dashboard({ user, courses, enrollments, grades }) {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     // Simulated data fetch so the loading state is visible.
-    const timer = window.setTimeout(() => setIsLoading(false), 600);
-    return () => window.clearTimeout(timer);
-  }, []);
+    const timer = window.setTimeout(() => setIsLoading(false), 600)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   if (isLoading) {
     return (
@@ -96,16 +96,16 @@ function Dashboard({ user, courses, enrollments, grades }) {
         <p className="page-subtitle">Loading your information…</p>
         <Spinner label="Fetching records…" />
       </>
-    );
+    )
   }
 
-  if (user.role === "administrator") {
+  if (user.role === 'administrator') {
     const studentCount = new Set(
       enrollments.map((enrollment) => enrollment.studentId),
-    ).size;
+    ).size
     const pendingCount = enrollments.filter(
-      (enrollment) => enrollment.status === "pending",
-    ).length;
+      (enrollment) => enrollment.status === 'pending',
+    ).length
 
     return (
       <>
@@ -123,7 +123,7 @@ function Dashboard({ user, courses, enrollments, grades }) {
           <StatCard
             label="Pending Approvals"
             value={pendingCount}
-            hint={pendingCount > 0 ? "Needs review" : undefined}
+            hint={pendingCount > 0 ? 'Needs review' : undefined}
           />
         </div>
 
@@ -143,20 +143,20 @@ function Dashboard({ user, courses, enrollments, grades }) {
           />
         </section>
       </>
-    );
+    )
   }
 
   const myEnrollments = enrollments.filter(
     (enrollment) => enrollment.studentId === user.studentId,
-  );
-  const myGrades = grades.filter((grade) => grade.studentId === user.studentId);
+  )
+  const myGrades = grades.filter((grade) => grade.studentId === user.studentId)
   const approvedCount = myEnrollments.filter(
-    (enrollment) => enrollment.status === "approved",
-  ).length;
+    (enrollment) => enrollment.status === 'approved',
+  ).length
   const pendingCount = myEnrollments.filter(
-    (enrollment) => enrollment.status === "pending",
-  ).length;
-  const gpa = computeGpa(myGrades);
+    (enrollment) => enrollment.status === 'pending',
+  ).length
+  const gpa = computeGpa(myGrades)
 
   return (
     <>
@@ -207,8 +207,8 @@ function Dashboard({ user, courses, enrollments, grades }) {
             <StatCard label="Pending" value={pendingCount} />
             <StatCard
               label="GPA"
-              value={gpa > 0 ? gpa.toFixed(2) : "—"}
-              hint={myGrades.length === 0 ? "No grades yet" : undefined}
+              value={gpa > 0 ? gpa.toFixed(2) : '—'}
+              hint={myGrades.length === 0 ? 'No grades yet' : undefined}
             />
           </div>
 
@@ -246,7 +246,7 @@ function Dashboard({ user, courses, enrollments, grades }) {
         </div>
       </div>
     </>
-  );
+  )
 }
 
-export default Dashboard;
+export default Dashboard
