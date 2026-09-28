@@ -7,13 +7,26 @@ import Dashboard from './pages/Dashboard'
 import FormPage from './pages/FormPage'
 import FormOutput from './pages/FormOutput'
 import NotFound from './pages/NotFound'
+import { courses as seedCourses }     from './data/courses'
+import { enrollments as seedEnrollments } from './data/enrollments'
+import { grades as seedGrades }       from './data/grades'
+import { students }                   from './data/users'
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null)
+  const [courses]     = useState(seedCourses)           // read-only
+  const [enrollments, setEnrollments] = useState(seedEnrollments)
+  const [grades, setGrades]           = useState(seedGrades)
 
   function handleLogin(user) { setCurrentUser(user) }
   function handleLogout() { setCurrentUser(null) }
-
+  function addEnrollment(enrollment) {
+    setEnrollments((prev) => [...prev, enrollment])
+  }
+  function addGrade(grade) {
+    setGrades((prev) => [...prev, grade])
+  }
+  
   return (
     <HashRouter>
       <Routes>
