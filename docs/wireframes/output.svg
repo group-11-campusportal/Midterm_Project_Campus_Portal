@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 360" role="img" aria-label="Wireframe: form output page listing submitted records newest first">
+  <rect width="520" height="360" fill="#ffffff"/>
+  <g font-family="system-ui, sans-serif">
+    <rect x="0.5" y="0.5" width="519" height="359" fill="none" stroke="#cbd5e1"/>
+    <rect x="0" y="0" width="520" height="30" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <text x="12" y="20" font-size="9" fill="#64748b">header · role-aware menu</text>
+    <text x="24" y="60" font-size="15" font-weight="700" fill="#0f172a">Form Output</text>
+    <text x="24" y="76" font-size="9" fill="#94a3b8">Every record added through the form, newest first.</text>
+    <!-- success alert -->
+    <rect x="24" y="88" width="472" height="26" rx="4" fill="#ecfdf3" stroke="#86efac"/>
+    <text x="36" y="105" font-size="9" fill="#16a34a">Enrollment request was submitted and is pending approval.</text>
+    <!-- output table -->
+    <rect x="24" y="126" width="472" height="212" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="38" y="148" font-size="11" font-weight="700" fill="#0f172a">Form Output</text>
+    <text x="482" y="148" font-size="9" fill="#94a3b8" text-anchor="end">3 records</text>
+    <line x1="38" y1="160" x2="482" y2="160" stroke="#cbd5e1"/>
+    <g font-size="8" fill="#94a3b8">
+      <text x="38" y="176">COURSE</text><text x="230" y="176">TERM</text><text x="310" y="176">SUBMITTED</text><text x="420" y="176">STATUS</text>
+    </g>
+    <g font-size="9" fill="#334155">
+      <text x="38" y="198">CS310 Web Application Development</text><text x="230" y="198">2025/2026-1</text><text x="310" y="198">2025-09-25</text>
+      <text x="38" y="222">CS210 Discrete Mathematics</text><text x="230" y="222">2025/2026-1</text><text x="310" y="222">2025-09-24</text>
+      <text x="38" y="246">CS201 Data Structures</text><text x="230" y="246">2025/2026-1</text><text x="310" y="246">2025-09-24</text>
+    </g>
+    <g font-size="8">
+      <rect x="420" y="189" width="52" height="13" rx="6" fill="#fff7ed" stroke="#fdba74"/><text x="446" y="198" fill="#d97706" text-anchor="middle">pending</text>
+      <rect x="420" y="213" width="52" height="13" rx="6" fill="#fff7ed" stroke="#fdba74"/><text x="446" y="222" fill="#d97706" text-anchor="middle">pending</text>
+      <rect x="420" y="237" width="52" height="13" rx="6" fill="#ecfdf3" stroke="#86efac"/><text x="446" y="246" fill="#16a34a" text-anchor="middle">approved</text>
+    </g>
+    <text x="38" y="286" font-size="8" fill="#94a3b8">Records come from shared state in App, so new entries stack up.</text>
+  </g>
+</svg>
