@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local backend configuration and SQLite database (including WAL sidecars).
+.env
+.env.*
+!.env.example
+backend/data/
+*.db
+*.db-wal
+*.db-shm
