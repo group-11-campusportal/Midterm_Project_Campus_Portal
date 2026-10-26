@@ -3,36 +3,8 @@ import StatCard from '../components/StatCard'
 import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import Spinner from '../components/Spinner'
+import EnrollmentDetailModal from '../components/EnrollmentDetailModal'
 import { computeGpa } from '../utils/grade'
-
-const enrollmentColumns = [
-  {
-    key: 'student',
-    label: 'Student',
-    render: (row) => (
-      <>
-        <span className="table__strong">{row.studentName}</span>
-        <span className="table__muted">{row.studentId}</span>
-      </>
-    ),
-  },
-  {
-    key: 'course',
-    label: 'Course',
-    render: (row) => (
-      <>
-        <span className="table__strong">{row.courseCode}</span>
-        <span className="table__muted">{row.courseTitle}</span>
-      </>
-    ),
-  },
-  { key: 'term', label: 'Term' },
-  {
-    key: 'status',
-    label: 'Status',
-    render: (row) => <StatusBadge status={row.status} />,
-  },
-]
 
 const myEnrollmentColumns = [
   {
@@ -80,8 +52,16 @@ const gradeColumns = [
   },
 ]
 
-function Dashboard({ user, courses, enrollments, grades }) {
+function Dashboard({
+  user,
+  courses,
+  enrollments,
+  grades,
+  students = [],
+  onUpdateEnrollmentStatus,
+}) {
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState(null)
 
   useEffect(() => {
     // Simulated data fetch so the loading state is visible.
@@ -106,6 +86,81 @@ function Dashboard({ user, courses, enrollments, grades }) {
     const pendingCount = enrollments.filter(
       (enrollment) => enrollment.status === 'pending',
     ).length
+
+    // Active enrollment selected for detail view modal
+    const selectedEnrollment =
+      enrollments.find((item) => item.id === selectedEnrollmentId) || null
+    const selectedStudent = selectedEnrollment
+      ? students.find((s) => s.studentId === selectedEnrollment.studentId)
+      : null
+    const selectedCourse = selectedEnrollment
+      ? courses.find((c) => c.code === selectedEnrollment.courseCode)
+      : null
+
+    const adminEnrollmentColumns = [
+      {
+        key: 'student',
+        label: 'Student',
+        render: (row) => (
+          <>
+            <span className="table__strong">{row.studentName}</span>
+            <span className="table__muted">{row.studentId}</span>
+          </>
+        ),
+      },
+      {
+        key: 'course',
+        label: 'Course',
+        render: (row) => (
+          <>
+            <span className="table__strong">{row.courseCode}</span>
+            <span className="table__muted">{row.courseTitle}</span>
+          </>
+        ),
+      },
+      { key: 'term', label: 'Term' },
+      {
+        key: 'status',
+        label: 'Status',
+        render: (row) => <StatusBadge status={row.status} />,
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        render: (row) => (
+          <div className="table-actions">
+            <button
+              type="button"
+              className="btn btn--xs btn--ghost"
+              onClick={() => setSelectedEnrollmentId(row.id)}
+              title="View full enrollment details"
+            >
+              Details
+            </button>
+            {row.status === 'pending' && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--xs btn--success"
+                  onClick={() => onUpdateEnrollmentStatus?.(row.id, 'approved')}
+                  title="Approve enrollment"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--xs btn--danger"
+                  onClick={() => onUpdateEnrollmentStatus?.(row.id, 'rejected')}
+                  title="Reject enrollment"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+          </div>
+        ),
+      },
+    ]
 
     return (
       <>
@@ -136,12 +191,24 @@ function Dashboard({ user, courses, enrollments, grades }) {
           </div>
 
           <DataTable
-            columns={enrollmentColumns}
+            columns={adminEnrollmentColumns}
             rows={enrollments}
             emptyTitle="No enrollments yet"
             emptyMessage="Enrollment requests submitted by students will appear here."
           />
         </section>
+
+        {selectedEnrollment && (
+          <EnrollmentDetailModal
+            enrollment={selectedEnrollment}
+            student={selectedStudent}
+            course={selectedCourse}
+            onClose={() => setSelectedEnrollmentId(null)}
+            onUpdateStatus={(id, status) => {
+              onUpdateEnrollmentStatus?.(id, status)
+            }}
+          />
+        )}
       </>
     )
   }

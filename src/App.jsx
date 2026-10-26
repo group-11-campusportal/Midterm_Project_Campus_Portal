@@ -24,7 +24,7 @@ function App() {
   })
 
   // Seeded from the hardcoded data files, then extended by the forms.
-  const [courses] = useState(seedCourses)
+  const [courses, setCourses] = useState(seedCourses)
   const [enrollments, setEnrollments] = useState(seedEnrollments)
   const [grades, setGrades] = useState(seedGrades)
 
@@ -39,6 +39,37 @@ function App() {
   // Client form: a new enrollment request (always starts as "pending").
   function addEnrollment(enrollment) {
     setEnrollments((previous) => [...previous, enrollment])
+  }
+
+  // Administrator: approve or reject an enrollment request.
+  function updateEnrollmentStatus(enrollmentId, nextStatus) {
+    const target = enrollments.find((item) => item.id === enrollmentId)
+    if (!target) return
+
+    setEnrollments((previous) =>
+      previous.map((item) =>
+        item.id === enrollmentId ? { ...item, status: nextStatus } : item,
+      ),
+    )
+
+    // Keep course enrolled count consistent with approval status
+    if (nextStatus === 'approved' && target.status !== 'approved') {
+      setCourses((previous) =>
+        previous.map((course) =>
+          course.code === target.courseCode
+            ? { ...course, enrolled: Math.min(course.capacity, course.enrolled + 1) }
+            : course,
+        ),
+      )
+    } else if (target.status === 'approved' && nextStatus !== 'approved') {
+      setCourses((previous) =>
+        previous.map((course) =>
+          course.code === target.courseCode
+            ? { ...course, enrolled: Math.max(0, course.enrolled - 1) }
+            : course,
+        ),
+      )
+    }
   }
 
   // Administrator form: a newly recorded grade.
@@ -77,6 +108,8 @@ function App() {
                 courses={courses}
                 enrollments={enrollments}
                 grades={grades}
+                students={students}
+                onUpdateEnrollmentStatus={updateEnrollmentStatus}
               />
             }
           />
