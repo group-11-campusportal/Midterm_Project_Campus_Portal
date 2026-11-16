@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import logo from '../assets/logo.svg'
-import { users } from '../data/users'
+import { apiFetch, setToken } from '../lib/api'
+
+const DEMO_ACCOUNTS = [
+  { role: 'Administrator', username: 'admin', password: 'admin123' },
+  { role: 'Student', username: 'andi', password: 'student123' },
+  { role: 'Student', username: 'bella', password: 'student123' },
+]
 
 function Login({ onLogin }) {
   const navigate = useNavigate()
@@ -30,7 +36,7 @@ function Login({ onLogin }) {
     return Object.keys(nextErrors).length === 0
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setSubmitError('')
 
@@ -40,25 +46,24 @@ function Login({ onLogin }) {
 
     setIsSubmitting(true)
 
-    // Simulated check against the hardcoded users (no server, no hashing).
-    // The timeout only exists so the loading state is visible.
-    window.setTimeout(() => {
-      const matchedUser = users.find(
-        (user) =>
-          user.username === form.username.trim() &&
-          user.password === form.password,
-      )
+    try {
+      const result = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: form.username.trim(),
+          password: form.password,
+        }),
+      })
 
-      if (!matchedUser) {
-        setSubmitError('Invalid username or password. Please try again.')
-        setIsSubmitting(false)
-        return
-      }
-
-      onLogin(matchedUser)
+      setToken(result.token)
+      onLogin(result.user)
       const redirectTo = location.state?.from || '/dashboard'
       navigate(redirectTo, { replace: true })
-    }, 600)
+    } catch (error) {
+      setSubmitError(error.message || 'Invalid username or password. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -129,12 +134,10 @@ function Login({ onLogin }) {
           <div className="auth__demo">
             <span className="auth__demo-title">Demo accounts</span>
             <ul className="auth__demo-list">
-              {users.map((user) => (
-                <li key={user.id}>
-                  <span className="auth__demo-role">
-                    {user.role === 'administrator' ? 'Administrator' : 'Student'}
-                  </span>{' '}
-                  <code>{user.username}</code> / <code>{user.password}</code>
+              {DEMO_ACCOUNTS.map((item) => (
+                <li key={item.username}>
+                  <span className="auth__demo-role">{item.role}</span>{' '}
+                  <code>{item.username}</code> / <code>{item.password}</code>
                 </li>
               ))}
             </ul>
