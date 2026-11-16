@@ -58,17 +58,10 @@ function Dashboard({
   enrollments,
   grades,
   students = [],
+  isLoading = false, 
   onUpdateEnrollmentStatus,
 }) {
-  const [isLoading, setIsLoading] = useState(true)
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState(null)
-
-  useEffect(() => {
-    // Simulated data fetch so the loading state is visible.
-    const timer = window.setTimeout(() => setIsLoading(false), 600)
-    return () => window.clearTimeout(timer)
-  }, [])
-
   if (isLoading) {
     return (
       <>

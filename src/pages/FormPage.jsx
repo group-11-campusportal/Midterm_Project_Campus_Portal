@@ -147,91 +147,67 @@ nextErrors.courseId =
     return Object.keys(nextErrors).length === 0
   }
 
-  function handleEnrollmentSubmit(event) {
+  async function handleEnrollmentSubmit(event) {
     event.preventDefault()
     setSubmitError('')
-
     if (!validateEnrollment()) {
       return
     }
-
     setIsSubmitting(true)
-
-    // Simulated save so the loading state is visible.
-    window.setTimeout(() => {
-      try {
-        const course = courses.find((item) => item.id === enrollmentForm.courseId)
-        const newEnrollment = {
-          id: `e-${Date.now()}`,
-          studentId: user.studentId,
-          studentName: user.name,
-          courseCode: course.code,
-          courseTitle: course.title,
-          credits: course.credits,
-          term: enrollmentForm.term,
-          status: 'pending',
-          enrolledAt: new Date().toISOString().slice(0, 10),
-        }
-
-        onAddEnrollment(newEnrollment)
-        navigate('/output', {
-          state: {
-            success: `Enrollment request for ${course.code} — ${course.title} was submitted and is pending approval.`,
-          },
-        })
-      } catch {
-        setSubmitError(
+    try {
+      const course = courses.find((item) => item.id === enrollmentForm.courseId)
+      await onAddEnrollment(course.id)
+      navigate('/output', {
+        state: {
+          success: `Enrollment request for ${course.code} — ${course.title} was submitted and is pending approval.`,
+        },
+      })
+    } catch (error) {
+      setSubmitError(
+        error.message ||
           'Something went wrong while submitting your request. Please try again.',
-        )
-        setIsSubmitting(false)
-      }
-    }, 500)
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  function handleGradeSubmit(event) {
+  async function handleGradeSubmit(event) {
     event.preventDefault()
     setSubmitError('')
-
     if (!validateGrade()) {
       return
     }
-
     setIsSubmitting(true)
-
-    // Simulated save so the loading state is visible.
-    window.setTimeout(() => {
-      try {
-        const student = students.find((item) => item.studentId === gradeForm.studentId)
-        const course = courses.find((item) => item.id === gradeForm.courseId)
-        const score = Number(gradeForm.score)
-        const { letter, points } = toLetterGrade(score)
-
-        const newGrade = {
-          id: `g-${Date.now()}`,
-          studentId: student.studentId,
-          studentName: student.name,
-          courseCode: course.code,
-          courseTitle: course.title,
-          credits: course.credits,
-          term: gradeForm.term,
-          score,
-          letter,
-          points,
-        }
-
-        onAddGrade(newGrade)
-        navigate('/output', {
-          state: {
-            success: `Grade ${letter} (${points.toFixed(1)} pts) recorded for ${student.name} in ${course.code}.`,
-          },
-        })
-      } catch {
-        setSubmitError(
+    try {
+      const student = students.find((item) => item.studentId === gradeForm.studentId)
+      const course = courses.find((item) => item.id === gradeForm.courseId)
+      const score = Number(gradeForm.score)
+      // Find the approved enrollment ID required by POST /api/grades
+      const matchingEnrollment = enrollments.find(
+        (enrollment) =>
+          enrollment.studentId === student.studentId &&
+          enrollment.courseCode === course.code &&
+          enrollment.term === gradeForm.term &&
+          enrollment.status === 'approved',
+      )
+      const savedGrade = await onAddGrade({
+        enrollmentId: matchingEnrollment.id,
+        score,
+      })
+      navigate('/output', {
+        state: {
+          success: `Grade ${savedGrade.letter} (${savedGrade.points.toFixed(1)} pts) recorded for ${student.name} in ${course.code}.`,
+        },
+      })
+    } catch (error) {
+      setSubmitError(
+        error.message ||
           'Something went wrong while saving the grade. Please try again.',
-        )
-        setIsSubmitting(false)
-      }
-    }, 500)
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
 const scorePreview =
