@@ -35,18 +35,6 @@ function App() {
     return () => window.removeEventListener('auth:unauthorized', handleLogout)
   }, [handleLogout])
 
-  // Restore session on page refresh if a token exists in localStorage
-  useEffect(() => {
-    if (!getToken()) {
-      setAuthReady(true)
-      return
-    }
-    apiFetch('/api/auth/me')
-      .then((res) => setCurrentUser(res.user))
-      .catch(() => clearToken())
-      .finally(() => setAuthReady(true))
-  }, [])
-
   // Fetch all role-appropriate data from the API when logged in
   const loadPortalData = useCallback(async (user) => {
     if (!user) return
@@ -77,14 +65,21 @@ function App() {
     }
   }, [])
 
+  // Restore session on page refresh if a token exists in localStorage
   useEffect(() => {
-    if (currentUser) {
-      loadPortalData(currentUser)
-    }
-  }, [currentUser, loadPortalData])
+    if (!getToken()) return
+    apiFetch('/api/auth/me')
+      .then((res) => {
+        setCurrentUser(res.user)
+        return loadPortalData(res.user)
+      })
+      .catch(() => clearToken())
+      .finally(() => setAuthReady(true))
+  }, [loadPortalData])
 
   function handleLogin(user) {
     setCurrentUser(user)
+    loadPortalData(user)
   }
 
   // B3: Student creates an enrollment via POST /api/enrollments

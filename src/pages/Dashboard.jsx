@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import StatCard from '../components/StatCard'
 import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
@@ -58,10 +58,23 @@ function Dashboard({
   enrollments,
   grades,
   students = [],
-  isLoading = false, 
+  isLoading = false,
   onUpdateEnrollmentStatus,
 }) {
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState(null)
+  const [actionError, setActionError] = useState('')
+
+  async function handleStatusChange(enrollmentId, nextStatus) {
+    setActionError('')
+    try {
+      await onUpdateEnrollmentStatus?.(enrollmentId, nextStatus)
+    } catch (error) {
+      setActionError(
+        error.message || 'Unable to update enrollment status. Please try again.',
+      )
+    }
+  }
+
   if (isLoading) {
     return (
       <>
@@ -135,7 +148,7 @@ function Dashboard({
                 <button
                   type="button"
                   className="btn btn--xs btn--success"
-                  onClick={() => onUpdateEnrollmentStatus?.(row.id, 'approved')}
+                  onClick={() => handleStatusChange(row.id, 'approved')}
                   title="Approve enrollment"
                 >
                   Approve
@@ -143,7 +156,7 @@ function Dashboard({
                 <button
                   type="button"
                   className="btn btn--xs btn--danger"
-                  onClick={() => onUpdateEnrollmentStatus?.(row.id, 'rejected')}
+                  onClick={() => handleStatusChange(row.id, 'rejected')}
                   title="Reject enrollment"
                 >
                   Reject
@@ -175,6 +188,12 @@ function Dashboard({
           />
         </div>
 
+        {actionError ? (
+          <p className="alert alert--error" role="alert">
+            {actionError}
+          </p>
+        ) : null}
+
         <section className="card">
           <div className="section-head">
             <h2 className="section-head__title">All Enrollments</h2>
@@ -197,9 +216,7 @@ function Dashboard({
             student={selectedStudent}
             course={selectedCourse}
             onClose={() => setSelectedEnrollmentId(null)}
-            onUpdateStatus={(id, status) => {
-              onUpdateEnrollmentStatus?.(id, status)
-            }}
+            onUpdateStatus={handleStatusChange}
           />
         )}
       </>
