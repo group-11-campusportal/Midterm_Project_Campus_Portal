@@ -154,6 +154,38 @@ test('students see only their own enrollments and grades, including direct ID re
   await api('get', '/grades/g1', 'andi').expect(200)
 })
 
+test('list routes scope by the token and ignore any user id sent by the client', async () => {
+  const own = {
+    enrollments: (await api('get', '/enrollments', 'andi').expect(200)).body.data,
+    grades: (await api('get', '/grades', 'andi').expect(200)).body.data,
+  }
+  // Bella's identifiers in every place a client could try to send them.
+  const spoofs = ['userId=u3', 'user_id=u3', 'studentId=CS2023002', 'student_id=u3', 'id=u3', 'role=administrator']
+  for (const resource of ['enrollments', 'grades']) {
+    for (const query of spoofs) {
+      const result = await api('get', `/${resource}?${query}`, 'andi').expect(200)
+      assert.deepEqual(result.body.data, own[resource])
+    }
+    const viaHeaderAndBody = await api('get', `/${resource}`, 'andi')
+      .set('X-User-Id', 'u3').send({ userId: 'u3', studentId: 'CS2023002' }).expect(200)
+    assert.deepEqual(viaHeaderAndBody.body.data, own[resource])
+    assert.ok(own[resource].length > 0)
+    assert.ok(own[resource].every((row) => row.studentId === 'CS2023001'))
+  }
+  // The profile and GPA also follow the token, not the query string.
+  const profile = await api('get', '/auth/me?userId=u3', 'andi').expect(200)
+  assert.equal(profile.body.user.id, 'u2')
+  // A student cannot create an enrollment for somebody else: the owner is always req.user.id.
+  const course = await newCourse()
+  await api('post', '/enrollments', 'andi').send({ courseId: course.id, userId: 'u3' }).expect(400)
+  const created = await enroll(course.id, 'andi')
+  assert.equal(created.studentId, 'CS2023001')
+  const bella = (await api('get', '/enrollments', 'bella').expect(200)).body.data
+  assert.ok(bella.every((row) => row.id !== created.id && row.studentId === 'CS2023002'))
+  // The student directory stays admin-only.
+  await api('get', '/students', 'andi').expect(403)
+})
+
 test('courses support complete admin CRUD and authenticated student browsing', async () => {
   const course = await newCourse()
   assert.equal(course.enrolled, 0)
