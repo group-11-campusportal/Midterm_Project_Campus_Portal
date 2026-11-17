@@ -11,10 +11,10 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       {/* The guard decides which screens exist: no token, no tabs. */}
-      <Stack.Protected guard={signedIn}>
+      <Stack.Protected guard={signedIn} redirectTo="/login">
         <Stack.Screen name="(tabs)" />
       </Stack.Protected>
-      <Stack.Protected guard={!signedIn}>
+      <Stack.Protected guard={!signedIn} redirectTo="/(tabs)">
         <Stack.Screen name="login" />
       </Stack.Protected>
     </Stack>

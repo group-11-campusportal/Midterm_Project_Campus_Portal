@@ -82,4 +82,9 @@ export const api = {
   courses: () => apiFetch('/api/courses').then((r) => r.data),
   enrollments: () => apiFetch('/api/enrollments').then((r) => r.data),
   grades: () => apiFetch('/api/grades').then((r) => r.data),
+  updateEnrollmentStatus: (id, status) =>
+    apiFetch(`/api/enrollments/${id}/status`, {
+      method: 'PATCH',
+      body: { status },
+    }),
 }
