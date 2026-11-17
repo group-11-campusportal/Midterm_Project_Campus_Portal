@@ -407,6 +407,8 @@ test('configuration selects Turso only when its URL is set and accepts several C
     ['http://localhost:5173', 'https://campus.vercel.app'])
   assert.throws(() => loadConfig({ JWT_SECRET: secret, CORS_ORIGIN: 'http://localhost:5173,https://campus.vercel.app/' }), /CORS_ORIGIN/)
   assert.equal(loadConfig({ JWT_SECRET: secret, RENDER: 'true' }).host, '0.0.0.0')
+  assert.equal(loadConfig({ JWT_SECRET: secret, RAILWAY_ENVIRONMENT: 'production' }).host, '0.0.0.0')
+  assert.equal(loadConfig({ JWT_SECRET: secret, RAILWAY_ENVIRONMENT: 'production', HOST: '127.0.0.1' }).host, '127.0.0.1')
   assert.equal(loadConfig({ JWT_SECRET: secret, RENDER: 'true', TURSO_DATABASE_URL: 'libsql://x.turso.io', TURSO_AUTH_TOKEN: 't' }).database.url,
     'libsql://x.turso.io')
 })

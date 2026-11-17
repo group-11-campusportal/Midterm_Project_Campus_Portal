@@ -7,9 +7,9 @@ Owner: Bian. Source of truth: [`backend/src/schema.sql`](../../backend/src/schem
 | Environment | Engine | Location |
 |---|---|---|
 | Development | SQLite file through `@libsql/client` | `backend/data/campus.db` (git-ignored) |
-| Production | Turso (hosted libSQL) | `TURSO_DATABASE_URL`, set only on Render |
+| Production | Turso (hosted libSQL, AWS Singapore) | `TURSO_DATABASE_URL`, set only on the hosting platform (Railway) |
 
-The same SQL runs in both. Render's free disk is wiped on restart, so nothing is stored on the server itself.
+The same SQL runs in both. The host's disk is wiped on restart, so nothing is stored on the server itself.
 
 ## Tables
 
@@ -87,7 +87,7 @@ Storing only the raw score means these can never disagree with each other.
 
 The system stores no files today. If one is added (student photo, transcript PDF, enrollment proof):
 
-- The **file bytes** go to object storage (for example Cloudinary or Supabase Storage). They cannot go on Render's disk (wiped on restart) and should not go in the database (Turso rows are meant for small values).
+- The **file bytes** go to object storage (for example Cloudinary or Supabase Storage). They cannot go on the server's disk (wiped on restart) and should not go in the database (Turso rows are meant for small values).
 - The **database** keeps one row per file in a new `files` table: `id`, `owner_id → users.id`, `kind`, `storage_key`, `mime_type`, `size_bytes`, `created_at`.
 - **Upload flow:** the client asks the API for permission, the API checks the token and returns a short-lived signed upload URL, the client uploads straight to storage, then the API saves the row. The storage secret stays in the backend environment only.
 - **Download flow:** the API checks that the requester owns the file (or is an administrator) and returns a short-lived signed URL. Storage URLs are never public.
