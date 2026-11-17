@@ -9,6 +9,7 @@ export function safeUser(row) {
     : { ...user, staffId: row.staff_id, title: row.title, department: row.department }
 }
 
+// db is the database or an open transaction: both expose get/all/run.
 export function createStore(db) {
   const courseSelect = `SELECT c.*,
     (SELECT count(*) FROM enrollments e WHERE e.course_id = c.id AND e.status = 'approved') AS enrolled
@@ -31,18 +32,19 @@ export function createStore(db) {
   }
 
   return {
-    user: (id) => db.prepare('SELECT * FROM users WHERE id = ?').get(id),
-    userByUsername: (username) => db.prepare('SELECT * FROM users WHERE username = ?').get(username),
-    students: () => db.prepare("SELECT * FROM users WHERE role = 'client' ORDER BY student_id").all().map(safeUser),
-    courses: () => db.prepare(`${courseSelect} ORDER BY c.code, c.term, c.id`).all(),
-    course: (id) => db.prepare(`${courseSelect} WHERE c.id = ?`).get(id),
-    enrollment: (id) => db.prepare(`${enrollmentSelect} WHERE e.id = ?`).get(id),
-    enrollments: (userId) => db.prepare(`${enrollmentSelect}${userId ? ' WHERE e.student_id = ?' : ''}
-      ORDER BY e.enrolled_at, e.id`).all(...(userId ? [userId] : [])).map(publicEnrollment),
+    user: (id) => db.get('SELECT * FROM users WHERE id = ?', [id]),
+    userByUsername: (username) => db.get('SELECT * FROM users WHERE username = ?', [username]),
+    students: async () => (await db.all("SELECT * FROM users WHERE role = 'client' ORDER BY student_id")).map(safeUser),
+    courses: () => db.all(`${courseSelect} ORDER BY c.code, c.term, c.id`),
+    course: (id) => db.get(`${courseSelect} WHERE c.id = ?`, [id]),
+    enrollment: (id) => db.get(`${enrollmentSelect} WHERE e.id = ?`, [id]),
+    // userId always comes from the verified token (req.user.id), never from the request.
+    enrollments: async (userId) => (await db.all(`${enrollmentSelect}${userId ? ' WHERE e.student_id = ?' : ''}
+      ORDER BY e.enrolled_at, e.id`, userId ? [userId] : [])).map(publicEnrollment),
     publicEnrollment,
-    grade: (id) => db.prepare(`${gradeSelect} WHERE g.id = ?`).get(id),
-    grades: (userId) => db.prepare(`${gradeSelect}${userId ? ' WHERE e.student_id = ?' : ''}
-      ORDER BY g.rowid`).all(...(userId ? [userId] : [])).map(publicGrade),
+    grade: (id) => db.get(`${gradeSelect} WHERE g.id = ?`, [id]),
+    grades: async (userId) => (await db.all(`${gradeSelect}${userId ? ' WHERE e.student_id = ?' : ''}
+      ORDER BY g.rowid`, userId ? [userId] : [])).map(publicGrade),
     publicGrade,
   }
 }

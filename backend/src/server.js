@@ -1,14 +1,15 @@
 import { createApp } from './app.js'
-import { loadConfig } from './config.js'
+import { describeDatabase, loadConfig } from './config.js'
 import { openDatabase } from './database.js'
 
 let db
 try {
   const config = loadConfig()
-  db = openDatabase(config.dbPath)
+  db = await openDatabase(config.database)
   const app = createApp({ db, secret: config.secret, origin: config.origin })
   const server = app.listen(config.port, config.host, () => {
     console.log(`Campus Portal API running at http://${config.host}:${config.port}/api`)
+    console.log(`Database: ${describeDatabase(config.database)}`)
   })
   server.on('error', (error) => {
     console.error(`Could not start the API: ${error.message}`)
