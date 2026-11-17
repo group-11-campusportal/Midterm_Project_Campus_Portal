@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import StatCard from '../components/StatCard'
 import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
@@ -14,17 +14,24 @@ function Dashboard({
   enrollments,
   grades,
   students = [],
+  isLoading = false,
   onUpdateEnrollmentStatus,
 }) {
-  const [isLoading, setIsLoading] = useState(true)
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState(null)
   const [enrollmentFilter, setEnrollmentFilter] = useState('All')
   const [courseSearch, setCourseSearch] = useState('')
+  const [actionError, setActionError] = useState('')
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => setIsLoading(false), 500)
-    return () => window.clearTimeout(timer)
-  }, [])
+  async function handleStatusChange(enrollmentId, nextStatus) {
+    setActionError('')
+    try {
+      await onUpdateEnrollmentStatus?.(enrollmentId, nextStatus)
+    } catch (error) {
+      setActionError(
+        error.message || 'Unable to update enrollment status. Please try again.',
+      )
+    }
+  }
 
   const isAdministrator = user.role === 'administrator'
 
@@ -144,7 +151,7 @@ function Dashboard({
                 <button
                   type="button"
                   className="btn btn--xs btn--success"
-                  onClick={() => onUpdateEnrollmentStatus?.(row.id, 'approved')}
+                  onClick={() => handleStatusChange(row.id, 'approved')}
                   title="Approve enrollment"
                 >
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden="true">
@@ -155,7 +162,7 @@ function Dashboard({
                 <button
                   type="button"
                   className="btn btn--xs btn--danger"
-                  onClick={() => onUpdateEnrollmentStatus?.(row.id, 'rejected')}
+                  onClick={() => handleStatusChange(row.id, 'rejected')}
                   title="Reject enrollment"
                 >
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12" aria-hidden="true">
@@ -259,6 +266,12 @@ function Dashboard({
             hint={pendingCount > 0 ? 'Action required' : undefined}
           />
         </div>
+
+        {actionError ? (
+          <p className="alert alert--error" role="alert" style={{ marginBottom: '16px' }}>
+            {actionError}
+          </p>
+        ) : null}
 
         {/* University Enrollments Table with Filter Chips */}
         <section className="card card--elevated">
@@ -393,9 +406,7 @@ function Dashboard({
             student={selectedStudent}
             course={selectedCourse}
             onClose={() => setSelectedEnrollmentId(null)}
-            onUpdateStatus={(id, status) => {
-              onUpdateEnrollmentStatus?.(id, status)
-            }}
+            onUpdateStatus={handleStatusChange}
           />
         )}
       </div>

@@ -153,49 +153,32 @@ function EnrollmentDetailModal({
         </div>
 
         <footer className="modal-footer">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={onClose}
-          >
-            Close
-          </button>
-
-          {isPending ? (
-            <>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => onUpdateStatus(enrollment.id, 'rejected')}
-              >
-                Reject Request
-              </button>
-              <button
-                type="button"
-                className="btn btn--success"
-                onClick={() => onUpdateStatus(enrollment.id, 'approved')}
-              >
-                Approve Request
-              </button>
-            </>
-          ) : isApproved ? (
-            <button
-              type="button"
-              className="btn btn--danger-outline"
-              onClick={() => onUpdateStatus(enrollment.id, 'rejected')}
-            >
-              Change to Rejected
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--success"
-              onClick={() => onUpdateStatus(enrollment.id, 'approved')}
-            >
-              Re-approve Request
-            </button>
-          )}
-        </footer>
+       <button
+         type="button"
+         className="btn btn--ghost"
+         onClick={onClose}
+       >
+         Close
+       </button>
+       {isPending ? (
+         <>
+           <button
+             type="button"
+             className="btn btn--danger"
+             onClick={() => onUpdateStatus(enrollment.id, 'rejected')}
+           >
+             Reject Request
+           </button>
+           <button
+             type="button"
+             className="btn btn--success"
+             onClick={() => onUpdateStatus(enrollment.id, 'approved')}
+           >
+             Approve Request
+           </button>
+         </>
+       ) : null}
+     </footer>
       </div>
     </div>
   )

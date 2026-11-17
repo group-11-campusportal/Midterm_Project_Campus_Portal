@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { users } from '../data/users'
+import { apiFetch, setToken } from '../lib/api'
 
 const DEMO_ACCOUNTS = [
   { role: 'Student', username: 'andi', password: 'student123', label: 'Andi (Student)', color: '#2563eb' },
@@ -41,7 +41,7 @@ function Login({ onLogin }) {
     return Object.keys(nextErrors).length === 0
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
     setSubmitError('')
 
@@ -51,23 +51,24 @@ function Login({ onLogin }) {
 
     setIsSubmitting(true)
 
-    window.setTimeout(() => {
-      const matchedUser = users.find(
-        (user) =>
-          user.username === form.username.trim() &&
-          user.password === form.password,
-      )
+    try {
+      const result = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: form.username.trim(),
+          password: form.password,
+        }),
+      })
 
-      if (!matchedUser) {
-        setSubmitError('Invalid username or password. Please try again.')
-        setIsSubmitting(false)
-        return
-      }
-
-      onLogin(matchedUser)
+      setToken(result.token)
+      onLogin(result.user)
       const redirectTo = location.state?.from || '/dashboard'
       navigate(redirectTo, { replace: true })
-    }, 500)
+    } catch (error) {
+      setSubmitError(error.message || 'Invalid username or password. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
