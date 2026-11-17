@@ -37,7 +37,11 @@ beforeEach(async () => {
   app = createApp({ db, secret, logger: (error) => { throw error } })
 })
 afterEach(() => db.close())
-after(() => rmSync(directory, { recursive: true, force: true }))
+after(() => {
+  try {
+    rmSync(directory, { recursive: true, force: true })
+  } catch {}
+})
 
 function api(method, path, role = 'admin') {
   return request(app)[method](`/api${path}`).set('Authorization', `Bearer ${issueToken(users[role], secret)}`)

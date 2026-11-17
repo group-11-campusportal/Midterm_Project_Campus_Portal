@@ -133,14 +133,21 @@ function EnrollmentDetailModal({
 
           {/* Helpful context for the administrator */}
           {isApproved && (
-            <p className="alert alert--success">
-              ✓ This enrollment request has been approved. The student is now eligible to receive grades for this course.
+            <p className="alert alert--success" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>This enrollment request has been approved. The student is now eligible to receive grades for this course.</span>
             </p>
           )}
 
           {isRejected && (
-            <p className="alert alert--error">
-              ✕ This enrollment request was rejected. The student will not be able to attend or be graded for this course.
+            <p className="alert alert--error" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              <span>This enrollment request was rejected. The student will not be able to attend or be graded for this course.</span>
             </p>
           )}
         </div>
