@@ -43,4 +43,7 @@ CREATE TABLE grades (
 
 CREATE INDEX enrollments_course_status ON enrollments(course_id, status);
 CREATE INDEX grades_enrollment ON grades(enrollment_id);
-PRAGMA user_version = 1;
+
+-- One row. database.js refuses to start on a version it does not know.
+CREATE TABLE schema_version (version INTEGER NOT NULL);
+INSERT INTO schema_version (version) VALUES (1);

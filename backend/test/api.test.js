@@ -6,12 +6,12 @@ import { tmpdir } from 'node:os'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import request from 'supertest'
-import Database from 'better-sqlite3'
+import { createClient } from '@libsql/client'
 import { openDatabase } from '../src/database.js'
 import { seedDatabase } from '../src/seed.js'
 import { createApp } from '../src/app.js'
 import { issueToken } from '../src/auth.js'
-import { loadConfig, databasePath, backendDirectory } from '../src/config.js'
+import { loadConfig, databaseConfig, databasePath, backendDirectory } from '../src/config.js'
 import { gradeForScore, gpaForGrades } from '../src/grading.js'
 import { toLetterGrade, computeGpa } from '../../src/utils/grade.js'
 
@@ -23,17 +23,17 @@ const courseBody = {
 let directory, template, db, app, dbPath
 const users = { admin: 'u1', andi: 'u2', bella: 'u3' }
 
-before(() => {
+before(async () => {
   directory = mkdtempSync(join(tmpdir(), 'campus-portal-test-'))
   template = join(directory, 'template.db')
-  const initial = openDatabase(template)
-  seedDatabase(initial)
+  const initial = await openDatabase({ path: template })
+  await seedDatabase(initial)
   initial.close()
 })
-beforeEach(() => {
+beforeEach(async () => {
   dbPath = join(directory, 'current.db')
   copyFileSync(template, dbPath)
-  db = openDatabase(dbPath)
+  db = await openDatabase({ path: dbPath })
   app = createApp({ db, secret, logger: (error) => { throw error } })
 })
 afterEach(() => db.close())
@@ -76,7 +76,7 @@ test('all seeded accounts log in; passwords are hashed and never returned', asyn
     })
     assert.equal(claims.sub, id)
     assert.equal(claims.exp - claims.iat, 3600)
-    const stored = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(id)
+    const stored = await db.get('SELECT password_hash FROM users WHERE id = ?', [id])
     assert.notEqual(stored.password_hash, password)
     assert.ok(bcrypt.compareSync(password, stored.password_hash))
   }
@@ -196,7 +196,7 @@ test('approval enforces capacity; pending requests do not reserve seats', async 
   const second = await enroll(course.id, 'bella')
   await api('patch', `/enrollments/${first.id}/status`).send({ status: 'approved' }).expect(200)
   await api('patch', `/enrollments/${second.id}/status`).send({ status: 'approved' }).expect(409)
-  assert.equal(db.prepare('SELECT status FROM enrollments WHERE id = ?').get(second.id).status, 'pending')
+  assert.equal((await db.get('SELECT status FROM enrollments WHERE id = ?', [second.id])).status, 'pending')
   const updatedCourse = await api('get', `/courses/${course.id}`).expect(200)
   assert.equal(updatedCourse.body.data.enrolled, 1)
   await api('patch', `/enrollments/${second.id}/status`).send({ status: 'rejected' }).expect(200)
@@ -294,14 +294,25 @@ test('malformed JSON, oversized bodies, and unknown endpoints produce JSON error
   assert.equal(missing.body.error.code, 'NOT_FOUND')
 })
 
-test('SQLite enforces relationships, duplicates, and score constraints', () => {
-  assert.equal(db.pragma('foreign_keys', { simple: true }), 1)
-  assert.throws(() => db.prepare('DELETE FROM courses WHERE id = ?').run('c1'), /FOREIGN KEY/)
-  assert.throws(() => db.prepare('INSERT INTO enrollments (id, student_id, course_id) VALUES (?, ?, ?)')
-    .run('bad', 'missing', 'c1'), /FOREIGN KEY/)
-  assert.throws(() => db.prepare('INSERT INTO enrollments (id, student_id, course_id) VALUES (?, ?, ?)')
-    .run('duplicate', 'u2', 'c1'), /UNIQUE/)
-  assert.throws(() => db.prepare('UPDATE grades SET score = ? WHERE id = ?').run(-1, 'g1'), /CHECK/)
+test('SQLite enforces relationships, duplicates, and score constraints', async () => {
+  assert.equal((await db.get('PRAGMA foreign_keys')).foreign_keys, 1)
+  await assert.rejects(db.run('DELETE FROM courses WHERE id = ?', ['c1']), /FOREIGN KEY/)
+  await assert.rejects(db.run('INSERT INTO enrollments (id, student_id, course_id) VALUES (?, ?, ?)',
+    ['bad', 'missing', 'c1']), /FOREIGN KEY/)
+  await assert.rejects(db.run('INSERT INTO enrollments (id, student_id, course_id) VALUES (?, ?, ?)',
+    ['duplicate', 'u2', 'c1']), /UNIQUE/)
+  await assert.rejects(db.run('UPDATE grades SET score = ? WHERE id = ?', [-1, 'g1']), /CHECK/)
+})
+
+test('a failed transaction rolls back and later transactions still run', async () => {
+  await assert.rejects(db.transaction(async (tx) => {
+    await tx.run("UPDATE courses SET title = 'changed' WHERE id = 'c1'")
+    throw new Error('stop')
+  }), /stop/)
+  assert.notEqual((await db.get("SELECT title FROM courses WHERE id = 'c1'")).title, 'changed')
+  const course = await newCourse({ capacity: 2 })
+  const created = await Promise.all([enroll(course.id, 'andi'), enroll(course.id, 'bella')])
+  assert.deepEqual(created.map((row) => row.studentId).sort(), ['CS2023001', 'CS2023002'])
 })
 
 test('records survive database reopen and repeat seeding never overwrites user changes', async () => {
@@ -309,28 +320,37 @@ test('records survive database reopen and repeat seeding never overwrites user c
   const enrollment = await enroll(course.id)
   await api('patch', `/enrollments/${enrollment.id}/status`).send({ status: 'approved' }).expect(200)
   const grade = await api('post', '/grades').send({ enrollmentId: enrollment.id, score: 90 }).expect(201)
-  db.prepare("UPDATE users SET password_hash = 'changed-hash' WHERE id = 'u1'").run()
+  await db.run("UPDATE users SET password_hash = 'changed-hash' WHERE id = 'u1'")
   db.close()
-  db = openDatabase(dbPath)
-  assert.equal(seedDatabase(db).seeded, false)
-  assert.equal(db.prepare("SELECT password_hash FROM users WHERE id='u1'").get().password_hash, 'changed-hash')
+  db = await openDatabase({ path: dbPath })
+  assert.equal((await seedDatabase(db)).seeded, false)
+  assert.equal((await db.get("SELECT password_hash FROM users WHERE id='u1'")).password_hash, 'changed-hash')
   app = createApp({ db, secret })
   const persisted = await api('get', `/grades/${grade.body.data.id}`).expect(200)
   assert.equal(persisted.body.data.score, 90)
   assert.equal(persisted.body.data.courseId, course.id)
 })
 
-test('initialization is repeatable and refuses unknown schemas without overwriting tables', () => {
+test('initialization is repeatable and refuses unknown schemas without overwriting tables', async () => {
   const existing = join(directory, 'external.db')
-  const external = new Database(existing)
-  external.exec('CREATE TABLE keep_me (value TEXT); INSERT INTO keep_me VALUES (\'saved\')')
+  const external = createClient({ url: `file:${existing}` })
+  await external.executeMultiple("CREATE TABLE keep_me (value TEXT); INSERT INTO keep_me VALUES ('saved');")
   external.close()
-  assert.throws(() => openDatabase(existing), /Unversioned database/)
-  const unchanged = new Database(existing)
-  assert.equal(unchanged.prepare('SELECT value FROM keep_me').get().value, 'saved')
+  await assert.rejects(openDatabase({ path: existing }), /Unversioned database/)
+  const unchanged = createClient({ url: `file:${existing}` })
+  assert.equal((await unchanged.execute('SELECT value FROM keep_me')).rows[0].value, 'saved')
   unchanged.close()
-  db.pragma('user_version = 2')
-  assert.throws(() => openDatabase(dbPath), /Unsupported database schema/)
+  await db.run('UPDATE schema_version SET version = 2')
+  await assert.rejects(openDatabase({ path: dbPath }), /Unsupported database schema/)
+})
+
+test('a Week 10 better-sqlite3 database (PRAGMA user_version = 1) is adopted without data loss', async () => {
+  await db.run('DROP TABLE schema_version')
+  await db.run('PRAGMA user_version = 1')
+  db.close()
+  db = await openDatabase({ path: dbPath })
+  assert.equal((await db.get('SELECT version FROM schema_version')).version, 1)
+  assert.equal((await db.get('SELECT count(*) AS count FROM users')).count, 3)
 })
 
 test('configuration requires a secret, validates port/origin, and resolves DB paths from backend', () => {
@@ -342,4 +362,19 @@ test('configuration requires a secret, validates port/origin, and resolves DB pa
   assert.equal(config.host, '127.0.0.1')
   assert.equal(databasePath({ DB_PATH: ':memory:' }), ':memory:')
   assert.equal(databasePath({}), join(backendDirectory, 'data/campus.db'))
+})
+
+test('configuration selects Turso only when its URL is set and accepts several CORS origins', () => {
+  assert.deepEqual(databaseConfig({ DB_PATH: ':memory:' }), { path: ':memory:' })
+  assert.deepEqual(databaseConfig({ TURSO_DATABASE_URL: 'libsql://campus-portal.turso.io', TURSO_AUTH_TOKEN: 'token' }),
+    { url: 'libsql://campus-portal.turso.io', authToken: 'token' })
+  assert.throws(() => databaseConfig({ TURSO_DATABASE_URL: 'libsql://campus-portal.turso.io' }), /TURSO_AUTH_TOKEN/)
+  assert.throws(() => databaseConfig({ TURSO_DATABASE_URL: 'campus-portal.turso.io', TURSO_AUTH_TOKEN: 'token' }), /TURSO_DATABASE_URL/)
+  assert.equal(loadConfig({ JWT_SECRET: secret }).origin, 'http://localhost:5173')
+  assert.deepEqual(loadConfig({ JWT_SECRET: secret, CORS_ORIGIN: 'http://localhost:5173, https://campus.vercel.app' }).origin,
+    ['http://localhost:5173', 'https://campus.vercel.app'])
+  assert.throws(() => loadConfig({ JWT_SECRET: secret, CORS_ORIGIN: 'http://localhost:5173,https://campus.vercel.app/' }), /CORS_ORIGIN/)
+  assert.equal(loadConfig({ JWT_SECRET: secret, RENDER: 'true' }).host, '0.0.0.0')
+  assert.equal(loadConfig({ JWT_SECRET: secret, RENDER: 'true', TURSO_DATABASE_URL: 'libsql://x.turso.io', TURSO_AUTH_TOKEN: 't' }).database.url,
+    'libsql://x.turso.io')
 })

@@ -9,13 +9,13 @@ export function issueToken(userId, secret) {
 }
 
 export function authenticate(store, secret) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const match = /^Bearer (\S+)$/i.exec(req.headers.authorization || '')
     if (!match) return next(new ApiError(401, 'UNAUTHENTICATED', 'A valid Bearer token is required.'))
     try {
       const claims = jwt.verify(match[1], secret, { algorithms: ['HS256'], issuer, audience })
       if (typeof claims.sub !== 'string') throw new Error('Invalid subject')
-      const user = store.user(claims.sub)
+      const user = await store.user(claims.sub)
       if (!user) throw new Error('Account no longer exists')
       req.user = user
       next()
