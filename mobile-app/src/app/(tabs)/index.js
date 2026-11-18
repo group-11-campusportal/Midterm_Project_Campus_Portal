@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useCallback, useMemo, useState } from 'react'
+import { useFocusEffect, useRouter } from 'expo-router'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
   Pressable,
@@ -17,11 +18,12 @@ import { EmptyView, ErrorView, LoadingView } from '../../components/StateView'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
 import { useApiList } from '../../lib/useApiList'
-import { colors, font, gradients, radii, shadow, spacing } from '../../theme'
+import { colors, font, gradients, minTap, radii, shadow, spacing } from '../../theme'
 
 export default function DashboardScreen() {
   const { user, gpa, refreshMe } = useAuth()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const isStudent = user?.role !== 'administrator'
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -49,6 +51,19 @@ export default function DashboardScreen() {
     ])
   }, [refreshCourses, refreshEnrollments, refreshMe])
 
+  // Coming back from the enrollment form (or another tab) must show the new seat count and
+  // pending total. The first focus is skipped because useApiList already loaded on mount.
+  const firstFocus = useRef(true)
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false
+        return
+      }
+      onRefresh()
+    }, [onRefresh]),
+  )
+
   // Filter courses based on search
   const filteredCourses = useMemo(() => {
     if (!courses) return []
@@ -61,6 +76,14 @@ export default function DashboardScreen() {
         c.instructor?.toLowerCase().includes(q),
     )
   }, [courses, searchQuery])
+
+  // A course can be requested only once — the API answers 409 for a second row — so a course
+  // that already has an enrollment shows its status instead of an Enroll button.
+  const enrollmentByCourse = useMemo(() => {
+    const map = new Map()
+    for (const enrollment of enrollments ?? []) map.set(enrollment.courseId, enrollment.status)
+    return map
+  }, [enrollments])
 
   if (!courses && coursesError) {
     return <ErrorView message={coursesError} onRetry={reloadCourses} />
@@ -283,17 +306,59 @@ export default function DashboardScreen() {
           message={`No courses found matching "${searchQuery}".`}
         />
       }
-      renderItem={({ item }) => (
-        <View style={styles.courseItemWrap}>
-          <ListRow
-            badgeText={item.code}
-            title={item.title}
-            subtitle={`${item.instructor} · Term ${item.term}`}
-            meta={`${item.credits} Credits`}
-            progress={{ current: item.enrolled, max: item.capacity }}
-          />
-        </View>
-      )}
+      renderItem={({ item }) => {
+        const existingStatus = enrollmentByCourse.get(item.id)
+        const isFull = item.enrolled >= item.capacity
+        return (
+          <View style={styles.courseItemWrap}>
+            <ListRow
+              badgeText={item.code}
+              title={item.title}
+              subtitle={`${item.instructor} · Term ${item.term}`}
+              meta={`${item.credits} Credits`}
+              progress={{ current: item.enrolled, max: item.capacity }}
+            />
+            {/* Students get the entry point to the enrollment form; a row that already has a
+                request, or a full course, says so instead of offering a button that would fail. */}
+            {isStudent ? (
+              <View style={styles.courseActionRow}>
+                {existingStatus ? (
+                  <View style={styles.courseStatusChip}>
+                    <Text style={styles.courseStatusText}>
+                      {existingStatus === 'approved'
+                        ? 'Enrolled'
+                        : existingStatus === 'pending'
+                          ? 'Requested'
+                          : 'Rejected'}
+                    </Text>
+                  </View>
+                ) : isFull ? (
+                  <View style={[styles.courseStatusChip, styles.courseStatusFull]}>
+                    <Text style={[styles.courseStatusText, styles.courseStatusFullText]}>
+                      Course full
+                    </Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() =>
+                      router.push({ pathname: '/enroll', params: { courseId: item.id } })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={`Enroll in ${item.code}`}
+                    style={({ pressed }) => [
+                      styles.enrollButton,
+                      pressed && styles.enrollButtonPressed,
+                    ]}
+                  >
+                    <Ionicons name="add-circle" size={17} color={colors.primary} />
+                    <Text style={styles.enrollButtonText}>Enroll</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : null}
+          </View>
+        )
+      }}
     />
   )
 }
@@ -319,6 +384,38 @@ const styles = StyleSheet.create({
   courseItemWrap: {
     paddingHorizontal: spacing.md,
   },
+  courseActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 4,
+    marginTop: 6,
+  },
+  enrollButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: minTap,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.primaryMuted,
+    backgroundColor: colors.primarySoft,
+  },
+  enrollButtonPressed: { opacity: 0.75 },
+  enrollButtonText: { fontSize: font.small, fontWeight: '700', color: colors.primaryDark },
+  courseStatusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 32,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  courseStatusText: { fontSize: font.xs, fontWeight: '700', color: colors.muted },
+  courseStatusFull: { backgroundColor: colors.dangerSoft, borderColor: colors.dangerBorder },
+  courseStatusFullText: { color: colors.danger },
   sparkle1: {
     position: 'absolute',
     top: 50,

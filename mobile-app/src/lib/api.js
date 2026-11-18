@@ -81,6 +81,8 @@ export const api = {
   me: () => apiFetch('/api/auth/me'),
   courses: () => apiFetch('/api/courses').then((r) => r.data),
   enrollments: () => apiFetch('/api/enrollments').then((r) => r.data),
+  createEnrollment: (courseId) =>
+    apiFetch('/api/enrollments', { method: 'POST', body: { courseId } }).then((r) => r.data),
   grades: () => apiFetch('/api/grades').then((r) => r.data),
   updateEnrollmentStatus: (id, status) =>
     apiFetch(`/api/enrollments/${id}/status`, {
