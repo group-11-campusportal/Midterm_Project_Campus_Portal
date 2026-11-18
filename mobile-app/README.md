@@ -31,6 +31,7 @@ src/
   app/                  every file is a screen (Expo Router)
     _layout.js          AuthProvider + route guard (logged out → login, logged in → tabs)
     login.js
+    enroll.js enrollment form, presented as a modal from a course row
     (tabs)/             Courses, My enrollments, My grades, Profile (log out)
   context/AuthContext.js  useAuth(): status, user, gpa, signIn, signOut, clearSession
   lib/
@@ -48,3 +49,4 @@ src/
 - Field names follow the §5 API contract; the server decides which rows a user sees from the token, never from an id the app sends.
 - Screens use `theme.js` names, not raw colors or numbers.
 - Never commit `.env`.
+- The enrollment form sends only `{ courseId }`. A course that already has a request shows its status instead of a button, and a `409` is shown under the field, never retried.
