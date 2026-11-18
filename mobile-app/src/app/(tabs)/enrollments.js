@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useMemo, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   FlatList,
@@ -27,6 +28,19 @@ export default function EnrollmentsScreen() {
   const { items, error, refreshing, reload, refresh } = useApiList(api.enrollments)
   const [activeFilter, setActiveFilter] = useState('All')
   const [updatingId, setUpdatingId] = useState(null)
+
+  // Returning from the enrollment form must show the new request without a pull-to-refresh.
+  // The first focus is skipped because useApiList has already loaded on mount.
+  const firstFocus = useRef(true)
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false
+        return
+      }
+      refresh()
+    }, [refresh]),
+  )
 
   const filteredItems = useMemo(() => {
     if (!items) return []
