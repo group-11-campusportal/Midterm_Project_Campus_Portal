@@ -18,6 +18,7 @@ The API's free Render instance sleeps after ~15 minutes; the first request after
 
 Design Document: [`docs/design/README.md`](docs/design/README.md) ·
 Status: [`PROGRESS.md`](PROGRESS.md) · Agent rules: [`AGENTS.md`](AGENTS.md) ·
+Test script: [`docs/test-script.md`](docs/test-script.md) ·
 Week 13 plan: [`docs/WEEK13_TEAM_WORKFLOW.md`](docs/WEEK13_TEAM_WORKFLOW.md)
 
 ## Demo accounts
