@@ -247,7 +247,8 @@ function FormPage({
             <div className="hero-quick-pill">
               <span className="hero-quick-pill__item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                  <path d="M6 12v5c3 3 9 3 12 0v-5" />
                 </svg>
                 <span>{isAdministrator ? 'Grading System' : 'Max 24 SKS'}</span>
               </span>
@@ -329,11 +330,26 @@ function FormPage({
                     disabled={!gradeForm.studentId || gradeableCourses.length === 0}
                   >
                     <option value="">Choose course…</option>
-                    {gradeableCourses.map((course) => (
-                      <option key={course.id} value={course.id}>
-                        {course.code} — {course.title} ({course.credits} SKS)
-                      </option>
-                    ))}
+                    {gradeableCourses.map((course) => {
+                      const existingGrade = grades.find(
+                        (g) =>
+                          g.studentId === gradeForm.studentId &&
+                          g.courseCode === course.code &&
+                          g.term === gradeForm.term,
+                      )
+                      return (
+                        <option
+                          key={course.id}
+                          value={course.id}
+                          disabled={Boolean(existingGrade)}
+                        >
+                          {course.code} — {course.title} ({course.credits} SKS)
+                          {existingGrade
+                            ? ` (Graded: ${existingGrade.letter} / ${existingGrade.score} pts)`
+                            : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                   {!gradeForm.studentId ? (
                     <span className="field__hint">
@@ -411,11 +427,29 @@ function FormPage({
                     onChange={handleEnrollmentChange}
                   >
                     <option value="">Choose a course or click below…</option>
-                    {courses.map((course) => (
-                      <option key={course.id} value={course.id}>
-                        {course.code} — {course.title} ({course.credits} SKS)
-                      </option>
-                    ))}
+                    {courses.map((course) => {
+                      const isAlreadyEnrolled = enrollments.some(
+                        (e) =>
+                          e.studentId === user.studentId &&
+                          e.courseCode === course.code &&
+                          e.term === enrollmentForm.term,
+                      )
+                      const isFull = course.enrolled >= course.capacity
+                      return (
+                        <option
+                          key={course.id}
+                          value={course.id}
+                          disabled={isAlreadyEnrolled || isFull}
+                        >
+                          {course.code} — {course.title} ({course.credits} SKS)
+                          {isAlreadyEnrolled
+                            ? ' — Already Enrolled'
+                            : isFull
+                            ? ' — Class Full'
+                            : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                   {errors.courseId ? (
                     <span className="field__error">{errors.courseId}</span>
@@ -574,6 +608,12 @@ function FormPage({
                     const pct = Math.min(100, Math.round((c.enrolled / c.capacity) * 100))
                     const isSelected = selectedCourseId === c.id
                     const isFull = c.enrolled >= c.capacity
+                    const isAlreadyEnrolled = !isAdministrator && enrollments.some(
+                      (e) =>
+                        e.studentId === user.studentId &&
+                        e.courseCode === c.code &&
+                        e.term === enrollmentForm.term,
+                    )
 
                     return (
                       <tr key={c.id} style={isSelected ? { backgroundColor: 'var(--color-primary-soft)' } : undefined}>
@@ -610,26 +650,48 @@ function FormPage({
                           </div>
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className={`btn-select-row ${isSelected ? 'btn-select-row--active' : ''}`}
-                            onClick={() => selectCourse(c.id)}
-                            disabled={isFull && !isAdministrator}
-                            title={isFull ? 'Course is full' : 'Select for registration'}
-                          >
-                            {isSelected ? (
-                              <>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" width="12" height="12" aria-hidden="true">
-                                  <polyline points="20 6 9 17 4 12" />
-                                </svg>
-                                <span>Selected</span>
-                              </>
-                            ) : isFull ? (
-                              <span>Full</span>
-                            ) : (
-                              <span>Select</span>
-                            )}
-                          </button>
+                          {isAlreadyEnrolled ? (
+                            <button
+                              type="button"
+                              className="btn-select-row btn-select-row--enrolled"
+                              disabled
+                              title="You are already enrolled in this course for this term"
+                              aria-label={`Already enrolled in ${c.code}`}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="12" height="12" aria-hidden="true">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              <span>Enrolled</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`btn-select-row ${isSelected ? 'btn-select-row--active' : ''}`}
+                              onClick={() => selectCourse(c.id)}
+                              disabled={isFull && !isAdministrator}
+                              title={isFull ? 'Course is full' : 'Select for registration'}
+                              aria-label={
+                                isSelected
+                                  ? `Selected ${c.code} for registration`
+                                  : isFull
+                                  ? `${c.code} is full`
+                                  : `Select ${c.code} for registration`
+                              }
+                            >
+                              {isSelected ? (
+                                <>
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" width="12" height="12" aria-hidden="true">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                  <span>Selected</span>
+                                </>
+                              ) : isFull ? (
+                                <span>Full</span>
+                              ) : (
+                                <span>Select</span>
+                              )}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )

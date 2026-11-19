@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import StatusBadge from './StatusBadge'
 
 function EnrollmentDetailModal({
@@ -8,15 +8,54 @@ function EnrollmentDetailModal({
   onClose,
   onUpdateStatus,
 }) {
-  // Close the modal when the Escape key is pressed
+  const modalRef = useRef(null)
+  const previousActiveElement = useRef(null)
+
   useEffect(() => {
+    previousActiveElement.current = document.activeElement
+
     function handleKeyDown(event) {
       if (event.key === 'Escape') {
         onClose()
+        return
+      }
+
+      if (event.key === 'Tab' && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        if (focusableElements.length === 0) return
+
+        const firstElement = focusableElements[0]
+        const lastElement = focusableElements[focusableElements.length - 1]
+
+        if (event.shiftKey) {
+          if (document.activeElement === firstElement) {
+            event.preventDefault()
+            lastElement.focus()
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            event.preventDefault()
+            firstElement.focus()
+          }
+        }
       }
     }
+
+    const timer = setTimeout(() => {
+      const firstFocusable = modalRef.current?.querySelector('button:not([disabled])')
+      firstFocusable?.focus()
+    }, 50)
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('keydown', handleKeyDown)
+      if (previousActiveElement.current && typeof previousActiveElement.current.focus === 'function') {
+        previousActiveElement.current.focus()
+      }
+    }
   }, [onClose])
 
   if (!enrollment) return null
@@ -34,6 +73,7 @@ function EnrollmentDetailModal({
       aria-labelledby="modal-title"
     >
       <div
+        ref={modalRef}
         className="modal-card"
         onClick={(event) => event.stopPropagation()}
       >
