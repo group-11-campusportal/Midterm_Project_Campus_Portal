@@ -31,7 +31,7 @@ src/
   app/                  every file is a screen (Expo Router)
     _layout.js          AuthProvider + route guard (logged out → login, logged in → tabs)
     login.js
-    enroll.js enrollment form, presented as a modal from a course row
+    enroll.js           enrollment form, presented as a modal from a course row
     (tabs)/             Courses, My enrollments, My grades, Profile (log out)
   context/AuthContext.js  useAuth(): status, user, gpa, signIn, signOut, clearSession
   lib/

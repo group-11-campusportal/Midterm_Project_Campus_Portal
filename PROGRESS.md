@@ -30,7 +30,7 @@ test script has been run against the deployed system.
 | 2 | Add the deployed web origin to `CORS_ORIGIN` | Bian | web URL |
 | 3 | `VITE_API_URL` at build time (Pages) or Vercel deploy | David | Render URL |
 | 4 | Phone pointed at Render, checked on iPhone **and** Android with Wi-Fi off | Fasya | Render URL |
-| 5 | Branch protection on `main` (PR + 1 review) and the PR template | Fasya | — |
+| 5 | Branch protection on `main` (PR + 1 review) | Fasya | — |
 | 6 | Run the test script and the five deployment checks, then fill the table below | everyone | 1–4 |
 | 7 | Walks through checklist A–J are prepared: one live flow per member | everyone | 1–4 |
 

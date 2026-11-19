@@ -28,7 +28,7 @@ function Dashboard({
       await onUpdateEnrollmentStatus?.(enrollmentId, nextStatus)
     } catch (error) {
       setActionError(
-        error.message || 'Unable to update enrollment status. Please try again.',
+        error.message || 'Unable to update enrollment status. Check your connection and try again.',
       )
     }
   }
