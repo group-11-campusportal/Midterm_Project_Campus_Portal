@@ -65,7 +65,7 @@ function Login({ onLogin }) {
       const redirectTo = location.state?.from || '/dashboard'
       navigate(redirectTo, { replace: true })
     } catch (error) {
-      setSubmitError(error.message || 'Invalid username or password. Please try again.')
+      setSubmitError(error.message || 'Invalid username or password. Check your credentials and try again.')
     } finally {
       setIsSubmitting(false)
     }

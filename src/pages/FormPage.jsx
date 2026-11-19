@@ -60,7 +60,7 @@ function FormPage({
     const nextErrors = {}
 
     if (!enrollmentForm.courseId) {
-      nextErrors.courseId = 'Please select a course.'
+      nextErrors.courseId = 'Select a course.'
       setErrors(nextErrors)
       return false
     }
@@ -88,10 +88,10 @@ function FormPage({
     const nextErrors = {}
 
     if (!gradeForm.studentId) {
-      nextErrors.studentId = 'Please select a student.'
+      nextErrors.studentId = 'Select a student.'
     }
     if (!gradeForm.courseId) {
-      nextErrors.courseId = 'Please select a course.'
+      nextErrors.courseId = 'Select a course.'
     }
 
     const score = Number(gradeForm.score)
@@ -151,7 +151,7 @@ function FormPage({
     } catch (error) {
       setSubmitError(
         error.message ||
-          'Something went wrong while submitting your request. Please try again.',
+          'Unable to submit enrollment request. Check your connection and try again.',
       )
     } finally {
       setIsSubmitting(false)
@@ -189,7 +189,7 @@ function FormPage({
     } catch (error) {
       setSubmitError(
         error.message ||
-          'Something went wrong while saving the grade. Please try again.',
+          'Unable to record grade. Check your connection and try again.',
       )
     } finally {
       setIsSubmitting(false)

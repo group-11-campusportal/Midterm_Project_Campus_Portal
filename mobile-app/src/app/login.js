@@ -55,7 +55,7 @@ export default function LoginScreen() {
     } catch (error) {
       setFormError(
         error.status === 401
-          ? 'Invalid username or password. Please try again.'
+          ? 'Invalid username or password. Check your credentials and try again.'
           : error.message,
       )
       setIsSubmitting(false)
