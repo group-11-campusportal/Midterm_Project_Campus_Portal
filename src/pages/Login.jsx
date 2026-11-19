@@ -214,6 +214,7 @@ function Login({ onLogin }) {
                     type="button"
                     className={`auth__demo-card ${isSelected ? 'auth__demo-card--active' : ''}`}
                     onClick={() => fillDemo(acc)}
+                    aria-label={`Quick fill ${acc.label} credentials`}
                   >
                     <div className="auth__demo-top">
                       <span

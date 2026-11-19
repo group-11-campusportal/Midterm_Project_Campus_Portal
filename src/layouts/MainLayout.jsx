@@ -28,6 +28,10 @@ function MainLayout({ user, onLogout }) {
 
   return (
     <div className="app-shell">
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
       <Navbar
         user={user}
         onLogout={onLogout}
@@ -41,14 +45,14 @@ function MainLayout({ user, onLogout }) {
           onNavigate={() => setMobileOpen(false)}
         />
 
-        <main className="content">
+        <main id="main-content" className="content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
 
       <footer className="app-footer">
         <p>University Campus Portal · Web &amp; Mobile Application Development</p>
-        <p>Front-end demo · all data is hardcoded</p>
+        <p>University Campus Portal · Integrated Academic System</p>
       </footer>
     </div>
   )

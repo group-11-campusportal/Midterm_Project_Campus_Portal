@@ -273,6 +273,39 @@ function Dashboard({
           </p>
         ) : null}
 
+        {/* Quick Admin Navigation Strip */}
+        <div className="admin-actions-bar">
+          <a href="#/form" className="admin-action-btn admin-action-btn--primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+            <span>Record Student Grades</span>
+          </a>
+          <a href="#/output" className="admin-action-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            <span>View Grade Records Ledger</span>
+          </a>
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              className="admin-action-btn admin-action-btn--warning"
+              onClick={() => setEnrollmentFilter('Pending')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>Review {pendingCount} Pending Requests</span>
+            </button>
+          )}
+        </div>
+
         {/* University Enrollments Table with Filter Chips */}
         <section className="card card--elevated">
           <div className="section-head">
@@ -317,6 +350,7 @@ function Dashboard({
             rows={filteredAdminEnrollments}
             emptyTitle={`No ${enrollmentFilter.toLowerCase()} enrollments`}
             emptyMessage="Enrollment requests submitted by students will appear here."
+            onRowClick={(row) => setSelectedEnrollmentId(row.id)}
           />
         </section>
 
@@ -582,6 +616,108 @@ function Dashboard({
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* Quick Academic Services Card inspired by Mobile Reference */}
+          <section className="card card--elevated card--spaced quick-services-card">
+            <div className="quick-services-card__header">
+              <h3 className="quick-services-card__title">Academic Services</h3>
+              <span className="quick-services-card__badge">UPH Portal</span>
+            </div>
+            <ul className="quick-services-list">
+              <li>
+                <a
+                  href="https://moodle.uph.edu"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="quick-service-item"
+                  aria-label="Open LMS Moodle (opens in new tab)"
+                >
+                  <div className="quick-service-icon quick-service-icon--orange">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                    </svg>
+                  </div>
+                  <div className="quick-service-info">
+                    <span className="quick-service-name">LMS / Moodle</span>
+                    <span className="quick-service-desc">Lecture slides &amp; assignments</span>
+                  </div>
+                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
+                    <polyline points="7 5 12 10 7 15" />
+                  </svg>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://library.uph.edu"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="quick-service-item"
+                  aria-label="Visit University Library (opens in new tab)"
+                >
+                  <div className="quick-service-icon quick-service-icon--blue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
+                      <line x1="3" y1="9" x2="9" y2="9" />
+                      <line x1="3" y1="15" x2="9" y2="15" />
+                    </svg>
+                  </div>
+                  <div className="quick-service-info">
+                    <span className="quick-service-name">Digital Library</span>
+                    <span className="quick-service-desc">Journals, e-books &amp; research</span>
+                  </div>
+                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
+                    <polyline points="7 5 12 10 7 15" />
+                  </svg>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#/form"
+                  className="quick-service-item"
+                  aria-label="Register Course for Term"
+                >
+                  <div className="quick-service-icon quick-service-icon--green">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
+                      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                      <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                    </svg>
+                  </div>
+                  <div className="quick-service-info">
+                    <span className="quick-service-name">Course Enrollment</span>
+                    <span className="quick-service-desc">Register subjects for active term</span>
+                  </div>
+                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
+                    <polyline points="7 5 12 10 7 15" />
+                  </svg>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="#/output"
+                  className="quick-service-item"
+                  aria-label="View My Submissions & Transcripts"
+                >
+                  <div className="quick-service-icon quick-service-icon--purple">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                  </div>
+                  <div className="quick-service-info">
+                    <span className="quick-service-name">My Submissions</span>
+                    <span className="quick-service-desc">Official enrollment receipts</span>
+                  </div>
+                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
+                    <polyline points="7 5 12 10 7 15" />
+                  </svg>
+                </a>
+              </li>
+            </ul>
           </section>
         </aside>
 
