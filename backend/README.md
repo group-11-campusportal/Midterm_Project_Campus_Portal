@@ -37,7 +37,8 @@ tab in production. Nothing else: not in source, not in `VITE_*` or `EXPO_PUBLIC_
 | `TURSO_DATABASE_URL` | **empty** | `libsql://campus-portal-biankrisna.aws-ap-southeast-1.turso.io` |
 | `TURSO_AUTH_TOKEN` | **empty** | read & write token |
 | `GEMINI_API_KEY` | optional (empty → AI route answers `503 AI_UNAVAILABLE`) | Google AI Studio key |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | `gemini-3.8-flash` | `gemini-3.8-flash` |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` (used when the main model is busy or retired) |
 | `CORS_ORIGIN` | `http://localhost:5173` | comma-separated list of the deployed web origins |
 | `HOST` | `127.0.0.1` | `0.0.0.0` (automatic when `RAILWAY_ENVIRONMENT` is set) |
 | `PORT` | `3000` | provided by Railway |
@@ -71,8 +72,9 @@ or reorder a step that has been deployed. (Tested in `test/capstone.test.js`.)
 `POST /api/ai/at-risk-summary` (administrator only, body `{ "term": "2024/2025" }`). The server reads
 grades and enrollments for that term, sends the provider **student numbers and numbers only** (no names),
 validates the model's JSON (unknown students and risk levels are dropped; name and GPA come from the
-database) and returns `aiGenerated: true`. Every provider failure is a JSON error with a message safe to
-show a user: `503 AI_UNAVAILABLE`, `503 AI_RATE_LIMITED`, `504 AI_TIMEOUT` (20 s), `502 AI_FAILED`,
+database) and returns `aiGenerated: true`. A busy answer (429/500/503) is retried once, then
+`GEMINI_FALLBACK_MODEL` is tried, all within 25 s. Every provider failure is a JSON error with a message safe to
+show a user: `503 AI_UNAVAILABLE`, `503 AI_RATE_LIMITED`, `504 AI_TIMEOUT` (25 s), `502 AI_FAILED`,
 `502 AI_BAD_RESPONSE`. The provider's own error text goes to the Railway logs only.
 
 ## Deployment checks owned by the backend

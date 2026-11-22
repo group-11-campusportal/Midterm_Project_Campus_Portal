@@ -96,9 +96,10 @@ test('AI route: report built from database facts; model output is validated', as
 test('AI route: every LLM failure becomes a clear JSON error, never a 500', async () => {
   const cases = [
     [createGeminiAdvisor({ apiKey: '', logger: quiet }), 503, 'AI_UNAVAILABLE'],
-    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, fetchImpl: gemini({}, { status: 500 }).fetchImpl }), 502, 'AI_FAILED'],
-    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, fetchImpl: gemini({}, { status: 429 }).fetchImpl }), 503, 'AI_RATE_LIMITED'],
-    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, fetchImpl: async () => { throw new TypeError('fetch failed') } }), 502, 'AI_FAILED'],
+    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, retryDelayMs: 0, fetchImpl: gemini({}, { status: 400 }).fetchImpl }), 502, 'AI_FAILED'],
+    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, retryDelayMs: 0, fetchImpl: gemini({}, { status: 503 }).fetchImpl }), 503, 'AI_RATE_LIMITED'],
+    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, retryDelayMs: 0, fetchImpl: gemini({}, { status: 429 }).fetchImpl }), 503, 'AI_RATE_LIMITED'],
+    [createGeminiAdvisor({ apiKey: 'k', logger: quiet, retryDelayMs: 0, fetchImpl: async () => { throw new TypeError('fetch failed') } }), 502, 'AI_FAILED'],
     [createGeminiAdvisor({ apiKey: 'k', logger: quiet, fetchImpl: async () => {
       throw new DOMException('timed out', 'TimeoutError') } }), 504, 'AI_TIMEOUT'],
     [createGeminiAdvisor({ apiKey: 'k', logger: quiet, fetchImpl: async () => new Response('{"candidates":[]}') }), 502, 'AI_BAD_RESPONSE'],
@@ -111,6 +112,21 @@ test('AI route: every LLM failure becomes a clear JSON error, never a 500', asyn
     assert.ok(response.body.error.message.length > 10)
     assert.ok(!JSON.stringify(response.body).includes('upstream detail'))
   }
+})
+
+test('AI route: a busy model is retried once, then the fallback model answers', async () => {
+  const good = gemini({ overallSummary: 'ok', atRiskStudents: [] })
+  const urls = []
+  const fetchImpl = async (url, options) => {
+    urls.push(url.split('/models/')[1].split(':')[0])
+    if (url.includes('main-model')) return new Response('{"error":{"code":503}}', { status: 503 })
+    return good.fetchImpl(url, options)
+  }
+  const advisor = createGeminiAdvisor({ apiKey: 'k', model: 'main-model', fallbackModel: 'spare-model',
+    retryDelayMs: 0, fetchImpl, logger: quiet })
+  const response = await call(build(advisor), '/ai/at-risk-summary').send({ term: '2024/2025' }).expect(200)
+  assert.deepEqual(urls, ['main-model', 'main-model', 'spare-model'])
+  assert.equal(response.body.data.overallSummary, 'ok')
 })
 
 test('AI route: input is validated and an empty term does not call the provider', async () => {

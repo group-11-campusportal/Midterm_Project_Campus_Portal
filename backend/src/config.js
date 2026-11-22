@@ -56,7 +56,8 @@ export function loadConfig(env = process.env) {
     origin: origins.length === 1 ? origins[0] : origins,
     database: databaseConfig(env),
     // Server-only AI key. Empty -> the AI route answers 503 AI_UNAVAILABLE; the rest of the API still works.
-    ai: { apiKey: env.GEMINI_API_KEY?.trim() || '', model: env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash' },
+    ai: { apiKey: env.GEMINI_API_KEY?.trim() || '', model: env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash',
+      fallbackModel: env.GEMINI_FALLBACK_MODEL?.trim() || 'gemini-3.5-flash-lite' },
     dbPath: databasePath(env),
   }
 }

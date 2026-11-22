@@ -57,8 +57,8 @@ Failure:
 | 409 | `CONFLICT` | duplicate enrollment, duplicate `(code, term)`, capacity reached, status already decided, deleting a linked record | show `message`, do not retry blindly |
 | 413 | `BODY_TOO_LARGE` | body over 16 KB | a client bug |
 | 502 | `AI_FAILED` / `AI_BAD_RESPONSE` | the AI provider errored or answered something unusable | show `message` and a retry button |
-| 503 | `AI_UNAVAILABLE` / `AI_RATE_LIMITED` | AI key not configured on the server / provider busy | show `message`; the rest of the app still works |
-| 504 | `AI_TIMEOUT` | the AI provider took longer than 20 s | show `message` and a retry button |
+| 503 | `AI_UNAVAILABLE` / `AI_RATE_LIMITED` | AI key not configured / provider still busy after a retry and the fallback model | show `message`; the rest of the app still works |
+| 504 | `AI_TIMEOUT` | the AI provider took longer than 25 s | show `message` and a retry button |
 | 500 | `INTERNAL_ERROR` | an unexpected server error; details are logged on Railway, never returned | show a generic failure and a retry |
 
 There is **no rate limiting** and **no password reset**. Both are outside this milestone.
@@ -338,7 +338,7 @@ Response `200`:
 - No enrollments in that term → `aiGenerated: false`, empty list, provider not called.
 - Clients must label `overallSummary`, `reason` and `recommendation` as **AI-generated**.
 - Errors: `502 AI_FAILED`, `502 AI_BAD_RESPONSE`, `503 AI_UNAVAILABLE`, `503 AI_RATE_LIMITED`,
-  `504 AI_TIMEOUT` (see 5.2). The AI call can take up to 20 s: show a loading state and disable the button.
+  `504 AI_TIMEOUT` (see 5.2). The AI call can take up to 25 s: show a loading state and disable the button.
 
 ## 5.5 Worked example (copy and paste)
 
