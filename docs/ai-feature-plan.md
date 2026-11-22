@@ -12,7 +12,7 @@ The **At-Risk Student Academic Advisor** helps the Administrator (Registrar) qui
 
 When the Administrator clicks **"Generate AI Risk Report"** on the Admin Dashboard:
 1. The backend queries the database (`grades`, `enrollments`, and `users`) to compute each student's current credit-weighted GPA, low/failing scores (`score < 65`), and rejected or unapproved enrollments.
-2. The backend sends this anonymized/structured academic summary to the Gemini model (`gemini-2.5-flash`) with a strict JSON schema prompt.
+2. The backend sends this anonymized/structured academic summary to the Gemini model (`gemini-3.8-flash`) with a strict JSON schema prompt.
 3. The backend returns a structured JSON list of flagged at-risk students, their risk level (`high` | `medium` | `low`), the specific academic reason, and a concrete advising recommendation.
 
 ---
@@ -62,8 +62,8 @@ When the Administrator clicks **"Generate AI Risk Report"** on the Admin Dashboa
 | `502 Bad Gateway` | `AI_FAILED` | Provider unreachable or answered with an error |
 | `502 Bad Gateway` | `AI_BAD_RESPONSE` | Provider answered, but not with the expected JSON |
 | `503 Service Unavailable` | `AI_UNAVAILABLE` | `GEMINI_API_KEY` is not configured on the server |
-| `503 Service Unavailable` | `AI_RATE_LIMITED` | Provider rate limit (HTTP 429) |
-| `504 Gateway Timeout` | `AI_TIMEOUT` | Provider did not answer within 20 s |
+| `503 Service Unavailable` | `AI_RATE_LIMITED` | Provider busy (HTTP 429/500/503) after one retry and the fallback model |
+| `504 Gateway Timeout` | `AI_TIMEOUT` | Provider did not answer within 25 s |
 
 > Implemented in `backend/src/ai.js` and `backend/src/app.js` (status 22 Nov 2026). The response also
 > carries `aiGenerated: true`, and student names are not sent to the provider.

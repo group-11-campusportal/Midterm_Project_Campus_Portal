@@ -98,42 +98,67 @@ export function checkedReport(raw, facts) {
 
 // Calls Google Gemini over REST. Every failure becomes an ApiError with a message safe to show a user;
 // the provider's own error text is logged on the server only.
-export function createGeminiAdvisor({ apiKey, model = 'gemini-2.5-flash', timeoutMs = 20000,
-  fetchImpl = globalThis.fetch, logger = console.error } = {}) {
+// "Busy" answers (429, 500, 503) are retried once, then the fallback model is tried, all within
+// one overall time budget so the client never waits longer than timeoutMs.
+const BUSY = new Set([429, 500, 503])
+const wait = (ms) => new Promise((done) => setTimeout(done, ms))
+
+export function createGeminiAdvisor({ apiKey, model = 'gemini-3.8-flash', fallbackModel = 'gemini-3.5-flash-lite',
+  timeoutMs = 25000, retryDelayMs = 1500, fetchImpl = globalThis.fetch, logger = console.error } = {}) {
+  const models = [...new Set([model, fallbackModel].filter(Boolean))]
+
+  async function attempt(name, body, deadline) {
+    const remaining = deadline - Date.now()
+    if (remaining < 1000) return { timedOut: true }
+    try {
+      const response = await fetchImpl(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(name)}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body, signal: AbortSignal.timeout(remaining),
+        })
+      if (response.ok) return { response }
+      logger(`AI provider (${name}) answered ${response.status}: ${(await response.text().catch(() => '')).slice(0, 500)}`)
+      return { status: response.status }
+    } catch (error) {
+      logger(`AI request (${name}) failed: ${error.name}: ${error.message}`)
+      if (error.name === 'TimeoutError' || error.name === 'AbortError') return { timedOut: true }
+      return { network: true }
+    }
+  }
+
   return async function advise(term, facts) {
     if (!apiKey) {
       throw aiError(503, 'AI_UNAVAILABLE', 'The AI advisor is not configured on the server.')
     }
+    const body = JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt(term, facts) }] }],
+      generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema },
+    })
+    const deadline = Date.now() + timeoutMs
+    let last = {}
     let response
-    try {
-      response = await fetchImpl(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt(term, facts) }] }],
-            generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema },
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        })
-    } catch (error) {
-      logger(`AI request failed: ${error.name}: ${error.message}`)
-      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-        throw aiError(504, 'AI_TIMEOUT', 'The AI service took too long to answer. Please try again.')
+    outer: for (const name of models) {
+      for (let tryNumber = 0; tryNumber < 2; tryNumber += 1) {
+        if (tryNumber > 0) await wait(Math.min(retryDelayMs, Math.max(0, deadline - Date.now() - 1000)))
+        last = await attempt(name, body, deadline)
+        if (last.response) { response = last.response; break outer }
+        if (last.timedOut) break outer
+        if (!BUSY.has(last.status) && !last.network) break // e.g. 404 model gone: try the fallback model
       }
-      throw aiError(502, 'AI_FAILED', 'The AI service could not be reached. Please try again later.')
     }
-    if (!response.ok) {
-      logger(`AI provider answered ${response.status}: ${(await response.text().catch(() => '')).slice(0, 500)}`)
-      if (response.status === 429) {
+    if (!response) {
+      if (last.timedOut) throw aiError(504, 'AI_TIMEOUT', 'The AI service took too long to answer. Please try again.')
+      if (BUSY.has(last.status)) {
         throw aiError(503, 'AI_RATE_LIMITED', 'The AI service is busy right now. Please try again in a minute.')
       }
+      if (last.network) throw aiError(502, 'AI_FAILED', 'The AI service could not be reached. Please try again later.')
       throw aiError(502, 'AI_FAILED', 'The AI service returned an error. Please try again later.')
     }
     let raw
     try {
-      const body = await response.json()
-      raw = JSON.parse(body.candidates[0].content.parts.map((part) => part.text || '').join(''))
+      const parsed = await response.json()
+      raw = JSON.parse(parsed.candidates[0].content.parts.map((part) => part.text || '').join(''))
     } catch (error) {
       logger(`AI response could not be parsed: ${error.message}`)
       throw aiError(502, 'AI_BAD_RESPONSE', 'The AI service returned an unexpected answer. Please try again.')
