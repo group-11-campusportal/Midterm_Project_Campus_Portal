@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import FormPage from './pages/FormPage'
 import FormOutput from './pages/FormOutput'
+import AiAdvisor from './pages/AiAdvisor'
 import NotFound from './pages/NotFound'
 import { apiFetch, clearToken, getToken } from './lib/api'
 
@@ -14,6 +15,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [authReady, setAuthReady] = useState(() => !getToken())
   const [isDataLoading, setIsDataLoading] = useState(false)
+  const [dataError, setDataError] = useState(null)
 
   const [courses, setCourses] = useState([])
   const [enrollments, setEnrollments] = useState([])
@@ -27,6 +29,7 @@ function App() {
     setEnrollments([])
     setGrades([])
     setStudents([])
+    setDataError(null)
   }, [])
 
   // Listen for 401 responses from apiFetch and log out immediately
@@ -39,6 +42,7 @@ function App() {
   const loadPortalData = useCallback(async (user) => {
     if (!user) return
     setIsDataLoading(true)
+    setDataError(null)
     try {
       const requests = [
         apiFetch('/api/courses'),
@@ -60,6 +64,9 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to load portal data:', error)
+      setDataError(
+        error.message || 'Unable to connect to academic portal records. Check your internet connection and try again.',
+      )
     } finally {
       setIsDataLoading(false)
     }
@@ -160,6 +167,8 @@ function App() {
                 grades={grades}
                 students={students}
                 isLoading={isDataLoading}
+                dataError={dataError}
+                onRetry={() => loadPortalData(currentUser)}
                 onUpdateEnrollmentStatus={updateEnrollmentStatus}
               />
             }
@@ -186,6 +195,14 @@ function App() {
                 enrollments={enrollments}
                 grades={grades}
               />
+            }
+          />
+          <Route
+            path="/ai-advisor"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={['administrator']}>
+                <AiAdvisor courses={courses} />
+              </ProtectedRoute>
             }
           />
         </Route>

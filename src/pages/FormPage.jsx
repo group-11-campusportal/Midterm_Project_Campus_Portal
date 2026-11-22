@@ -599,8 +599,19 @@ function FormPage({
               <tbody>
                 {filteredCourses.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-muted)' }}>
-                      No courses found matching "{searchQuery}"
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-muted)' }}>
+                      <p style={{ margin: '0 0 8px', fontWeight: 600, color: 'var(--color-text)' }}>
+                        {searchQuery ? `No courses found matching "${searchQuery}"` : 'No courses available for this semester.'}
+                      </p>
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          className="btn btn--small btn--outline"
+                          onClick={() => setSearchQuery('')}
+                        >
+                          Clear search
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ) : (
