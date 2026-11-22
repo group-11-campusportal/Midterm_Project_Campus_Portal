@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import StatusBadge from '../components/StatusBadge'
+import StudentDetailModal from '../components/StudentDetailModal'
 
 // The "form output" page. It reads the shared state that lives in App,
 // so every record added on the form page shows up here — newest first.
@@ -10,6 +11,7 @@ function FormOutput({ user, enrollments, grades }) {
   const isAdministrator = user.role === 'administrator'
   const [searchQuery, setSearchQuery] = useState('')
   const [filterTerm, setFilterTerm] = useState('all')
+  const [selectedRecord, setSelectedRecord] = useState(null)
 
   const baseRows = useMemo(() => {
     return isAdministrator
@@ -340,13 +342,41 @@ function FormOutput({ user, enrollments, grades }) {
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-muted)' }}>
-                      No submissions found.
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '48px 24px' }}>
+                      <p style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 600, color: 'var(--color-text)' }}>
+                        {searchQuery ? `No records found matching "${searchQuery}"` : 'No submissions found.'}
+                      </p>
+                      {searchQuery ? (
+                        <button
+                          type="button"
+                          className="btn btn--small btn--outline"
+                          onClick={() => setSearchQuery('')}
+                        >
+                          Clear search query
+                        </button>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                          Submitted course enrollments will appear here once registered.
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ) : (
                   filteredRows.map((row) => (
-                    <tr key={row.id}>
+                    <tr
+                      key={row.id}
+                      className="data-table__row--clickable"
+                      onClick={() => setSelectedRecord(row)}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`View details for ${row.courseCode} ${row.courseTitle}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSelectedRecord(row)
+                        }
+                      }}
+                    >
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span className="table__strong" style={{ fontFamily: 'var(--font-mono)' }}>{row.courseCode}</span>
@@ -375,6 +405,12 @@ function FormOutput({ user, enrollments, grades }) {
           )}
         </div>
       </section>
+
+      {/* Detail Modal */}
+      <StudentDetailModal
+        record={selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+      />
     </>
   )
 }

@@ -1,12 +1,11 @@
 import { NavLink } from 'react-router-dom'
 
-// Menu items change with the logged-in role. The same page component
-// renders different content, but the menu itself also differs so that
-// the menu always matches the permission matrix.
+// Menu items change with the logged-in role. The menu strictly
+// matches the permission matrix and role boundaries.
 function buildNavItems(role) {
   const isAdministrator = role === 'administrator'
 
-  return [
+  const items = [
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     {
       to: '/form',
@@ -19,6 +18,16 @@ function buildNavItems(role) {
       icon: 'output',
     },
   ]
+
+  if (isAdministrator) {
+    items.push({
+      to: '/ai-advisor',
+      label: 'AI Advisor',
+      icon: 'ai',
+    })
+  }
+
+  return items
 }
 
 function NavIcon({ name }) {
@@ -39,6 +48,15 @@ function NavIcon({ name }) {
         <path d="M4 2.5h8l4 4V17.5H4z" />
         <path d="M12 2.5v4h4" />
         <path d="M6.5 13.5h7M6.5 10.5h4" />
+      </svg>
+    )
+  }
+
+  if (name === 'ai') {
+    return (
+      <svg className="sidebar__icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10 2v3m0 10v3M2 10h3m10 0h3M4.93 4.93l2.12 2.12m5.9 5.9l2.12 2.12M4.93 15.07l2.12-2.12m5.9-5.9l2.12-2.12" />
+        <circle cx="10" cy="10" r="2.5" />
       </svg>
     )
   }

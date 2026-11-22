@@ -332,6 +332,8 @@ const styles = StyleSheet.create({
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
     gap: 4,
     paddingHorizontal: 14,
     paddingVertical: 7,

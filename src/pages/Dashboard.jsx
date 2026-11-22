@@ -4,6 +4,7 @@ import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import Spinner from '../components/Spinner'
 import EnrollmentDetailModal from '../components/EnrollmentDetailModal'
+import StudentDetailModal from '../components/StudentDetailModal'
 import { computeGpa } from '../utils/grade'
 
 const ENROLLMENT_FILTERS = ['All', 'Approved', 'Pending', 'Rejected']
@@ -15,9 +16,12 @@ function Dashboard({
   grades,
   students = [],
   isLoading = false,
+  dataError = null,
+  onRetry,
   onUpdateEnrollmentStatus,
 }) {
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState(null)
+  const [selectedStudentRow, setSelectedStudentRow] = useState(null)
   const [enrollmentFilter, setEnrollmentFilter] = useState('All')
   const [courseSearch, setCourseSearch] = useState('')
   const [actionError, setActionError] = useState('')
@@ -233,6 +237,19 @@ function Dashboard({
           </div>
         </section>
 
+        {dataError && (
+          <div className="banner banner--error" role="alert" style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '12px' }}>
+              <span>{dataError}</span>
+              {onRetry && (
+                <button type="button" className="btn btn--small btn--outline" onClick={onRetry}>
+                  Retry Connection
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* 4 StatCards Grid */}
         <div className="stats-grid">
           <StatCard
@@ -289,6 +306,13 @@ function Dashboard({
               <line x1="16" y1="17" x2="8" y2="17" />
             </svg>
             <span>View Grade Records Ledger</span>
+          </a>
+          <a href="#/ai-advisor" className="admin-action-btn admin-action-btn--purple">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
+              <path d="M10 2v3m0 10v3M2 10h3m10 0h3M4.93 4.93l2.12 2.12m5.9 5.9l2.12 2.12M4.93 15.07l2.12-2.12m5.9-5.9l2.12-2.12" />
+              <circle cx="10" cy="10" r="2.5" />
+            </svg>
+            <span>AI Academic Advisor</span>
           </a>
           {pendingCount > 0 && (
             <button
@@ -569,6 +593,19 @@ function Dashboard({
         </div>
       </section>
 
+      {dataError && (
+        <div className="banner banner--error" role="alert" style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '12px' }}>
+            <span>{dataError}</span>
+            {onRetry && (
+              <button type="button" className="btn btn--small btn--outline" onClick={onRetry}>
+                Retry Connection
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="dashboard-grid">
         {/* Left Column: My Profile */}
         <aside className="dashboard-sidebar">
@@ -818,6 +855,7 @@ function Dashboard({
             <DataTable
               columns={gradeColumns}
               rows={myGrades}
+              onRowClick={(row) => setSelectedStudentRow(row)}
               emptyTitle="No grades yet"
               emptyMessage="Grades will appear here once the registrar records them."
             />
@@ -863,6 +901,7 @@ function Dashboard({
             <DataTable
               columns={myEnrollmentColumns}
               rows={filteredStudentEnrollments}
+              onRowClick={(row) => setSelectedStudentRow(row)}
               emptyTitle={`No ${enrollmentFilter.toLowerCase()} courses`}
               emptyMessage="You have not enrolled in any course matching this filter."
             />
@@ -948,6 +987,12 @@ function Dashboard({
           </section>
         </div>
       </div>
+
+      {/* Student Record Detail Modal */}
+      <StudentDetailModal
+        record={selectedStudentRow}
+        onClose={() => setSelectedStudentRow(null)}
+      />
     </div>
   )
 }
