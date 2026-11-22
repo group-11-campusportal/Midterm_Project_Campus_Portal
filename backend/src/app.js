@@ -7,6 +7,7 @@ import { ApiError, badRequest, conflict, notFound } from './errors.js'
 import { fields, courseInput, scoreInput, text } from './validation.js'
 import { createStore, safeUser } from './store.js'
 import { gpaForGrades } from './grading.js'
+import { checkedReport, createGeminiAdvisor, riskFacts } from './ai.js'
 
 // A missing username still performs a password comparison.
 const dummyPasswordHash = bcrypt.hashSync('unused-account-password', 12)
@@ -21,7 +22,8 @@ function constraintKind(error) {
   return match ? match[1].replace(' ', '') : null
 }
 
-export function createApp({ db, secret, origin = 'http://localhost:5173', logger = console.error }) {
+export function createApp({ db, secret, origin = 'http://localhost:5173', logger = console.error,
+  advisor = createGeminiAdvisor({ logger }) }) {
   if (!secret || secret.length < 32) throw new Error('A JWT secret of at least 32 characters is required.')
   const app = express()
   const store = createStore(db)
@@ -34,6 +36,11 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
   app.use('/api', (req, res, next) => {
     res.set('Cache-Control', 'no-store')
     next()
+  })
+
+  // The bare domain answers too, so opening the API URL in a browser does not look broken.
+  app.get('/', (req, res) => {
+    res.json({ name: 'Campus Portal API', status: 'ok', health: '/api/health', docs: 'docs/design/05-api-contract.md' })
   })
 
   app.get('/api/health', async (req, res) => {
@@ -206,6 +213,21 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
     const result = await db.run('DELETE FROM grades WHERE id = ?', [req.params.id])
     if (!result.changes) notFound()
     res.status(204).end()
+  })
+
+  // AI (UC-8). Admin only. The client sends a term; the facts come from the database and the
+  // provider key stays in the server environment (GEMINI_API_KEY).
+  app.post('/api/ai/at-risk-summary', admin, async (req, res) => {
+    fields(req.body, ['term'])
+    const term = text(req.body.term, 'term', 20)
+    const facts = await riskFacts(db, term)
+    const generatedAt = new Date().toISOString()
+    if (!facts.length) {
+      return res.json({ data: { term, generatedAt, aiGenerated: false,
+        overallSummary: `No students have enrollments in term ${term}.`, atRiskStudents: [] } })
+    }
+    const report = checkedReport(await advisor(term, facts), facts)
+    res.json({ data: { term, generatedAt, aiGenerated: true, ...report } })
   })
 
   app.use((req, res, next) => next(new ApiError(404, 'NOT_FOUND', 'The requested endpoint was not found.')))

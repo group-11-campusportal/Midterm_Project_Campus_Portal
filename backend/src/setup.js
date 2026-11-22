@@ -10,6 +10,11 @@ if (!['init', 'seed'].includes(action)) {
   let db
   try {
     const database = databaseConfig()
+    // Production is never seeded from code: it already holds real records, and a demo account
+    // with a known password must not appear there. Seeding is for a laptop database only.
+    if (action === 'seed' && database.url) {
+      throw new Error('Refusing to seed: TURSO_DATABASE_URL is set, so this is the production database.')
+    }
     db = await openDatabase(database)
     console.log(action === 'seed' ? (await seedDatabase(db)).message : 'Database schema is ready.')
     console.log(`Database: ${describeDatabase(database)}`)

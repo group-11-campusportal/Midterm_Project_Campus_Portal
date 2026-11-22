@@ -9,7 +9,7 @@ and this page disagree, the code is the bug and the whole team changes together.
 | Item | Value |
 |---|---|
 | Base URL (development) | `http://127.0.0.1:3000` |
-| Base URL (deployed) | `https://campus-portal-api.onrender.com` |
+| Base URL (deployed) | `https://midtermprojectcampusportal-production.up.railway.app` (`GET /` answers a JSON status) |
 | Prefix | every route starts with `/api` |
 | Request body | `application/json`, maximum 16 KB, only the fields listed below |
 | Auth | `Authorization: Bearer <token>` on every route except `GET /api/health` and `POST /api/auth/login` |
@@ -56,7 +56,10 @@ Failure:
 | 404 | `NOT_FOUND` | unknown path under `/api` | a client bug |
 | 409 | `CONFLICT` | duplicate enrollment, duplicate `(code, term)`, capacity reached, status already decided, deleting a linked record | show `message`, do not retry blindly |
 | 413 | `BODY_TOO_LARGE` | body over 16 KB | a client bug |
-| 500 | `INTERNAL_ERROR` | an unexpected server error; details are logged on Render, never returned | show a generic failure and a retry |
+| 502 | `AI_FAILED` / `AI_BAD_RESPONSE` | the AI provider errored or answered something unusable | show `message` and a retry button |
+| 503 | `AI_UNAVAILABLE` / `AI_RATE_LIMITED` | AI key not configured on the server / provider busy | show `message`; the rest of the app still works |
+| 504 | `AI_TIMEOUT` | the AI provider took longer than 20 s | show `message` and a retry button |
+| 500 | `INTERNAL_ERROR` | an unexpected server error; details are logged on Railway, never returned | show a generic failure and a retry |
 
 There is **no rate limiting** and **no password reset**. Both are outside this milestone.
 
@@ -311,6 +314,32 @@ approved.
 
 **DELETE /api/grades/:id** — `204`, `404 NOT_FOUND`.
 
+### AI: at-risk student report (UC-8)
+
+`POST /api/ai/at-risk-summary` — **administrator only** (a student gets `403 FORBIDDEN`).
+
+Request: `{ "term": "2024/2025" }` (only this field; `400 INVALID_INPUT` otherwise).
+
+Response `200`:
+
+```json
+{ "data": {
+  "term": "2024/2025", "generatedAt": "2026-11-22T09:00:00.000Z", "aiGenerated": true,
+  "overallSummary": "One of two students shows risk indicators this term.",
+  "atRiskStudents": [
+    { "studentId": "CS2023002", "studentName": "Bella Kusuma", "gpa": 3.0, "riskLevel": "medium",
+      "reason": "Request for CS302 was rejected.", "recommendation": "Suggest an open 3-credit elective." }
+  ]
+} }
+```
+
+- `riskLevel` is `high` | `medium` | `low`; the list is sorted high → low.
+- `studentName` and `gpa` come from the database, not from the model. Only students that exist are kept.
+- No enrollments in that term → `aiGenerated: false`, empty list, provider not called.
+- Clients must label `overallSummary`, `reason` and `recommendation` as **AI-generated**.
+- Errors: `502 AI_FAILED`, `502 AI_BAD_RESPONSE`, `503 AI_UNAVAILABLE`, `503 AI_RATE_LIMITED`,
+  `504 AI_TIMEOUT` (see 5.2). The AI call can take up to 20 s: show a loading state and disable the button.
+
 ## 5.5 Worked example (copy and paste)
 
 Sign in as the student, read the scoped list, then request a seat:
@@ -345,6 +374,6 @@ As `bella` the same call returns five different rows, never `andi`'s.
 4. The server decides which rows a user sees. Do not send your own user id to filter a list.
 5. Read the token from storage on start-up and confirm it with `GET /api/auth/me` before rendering
    the app.
-6. Allow for a sleeping Render instance: wait at least 20 seconds before reporting a network
+6. Allow for a slow first response: wait at least 20 seconds before reporting a network
    failure, then offer a retry.
 7. `DELETE` returns `204` with no body — do not call `response.json()` on it.

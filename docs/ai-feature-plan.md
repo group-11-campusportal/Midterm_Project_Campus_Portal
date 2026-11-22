@@ -57,14 +57,21 @@ When the Administrator clicks **"Generate AI Risk Report"** on the Admin Dashboa
 | Status | Code | When |
 |---|---|---|
 | `400 Bad Request` | `INVALID_INPUT` | Missing or invalid `term` field |
-| `401 Unauthorized` | `UNAUTHORIZED` | Missing, invalid, or expired Bearer JWT |
+| `401 Unauthorized` | `UNAUTHENTICATED` | Missing, invalid, or expired Bearer JWT |
 | `403 Forbidden` | `FORBIDDEN` | Logged-in user is a `client` (student), not an `administrator` |
-| `503 Service Unavailable` | `AI_UNAVAILABLE` | `GEMINI_API_KEY` is not configured or upstream AI call timed out |
+| `502 Bad Gateway` | `AI_FAILED` | Provider unreachable or answered with an error |
+| `502 Bad Gateway` | `AI_BAD_RESPONSE` | Provider answered, but not with the expected JSON |
+| `503 Service Unavailable` | `AI_UNAVAILABLE` | `GEMINI_API_KEY` is not configured on the server |
+| `503 Service Unavailable` | `AI_RATE_LIMITED` | Provider rate limit (HTTP 429) |
+| `504 Gateway Timeout` | `AI_TIMEOUT` | Provider did not answer within 20 s |
+
+> Implemented in `backend/src/ai.js` and `backend/src/app.js` (status 22 Nov 2026). The response also
+> carries `aiGenerated: true`, and student names are not sent to the provider.
 
 ---
 
 ## 3. Security & Where the API Key Lives (Checklist F)
 
-- **Backend-Only Secret:** `GEMINI_API_KEY` is stored **exclusively** in the backend environment (`backend/.env` locally, and Render Environment Variables in production) and documented as an empty placeholder in `backend/.env.example`.
+- **Backend-Only Secret:** `GEMINI_API_KEY` is stored **exclusively** in the backend environment (`backend/.env` locally, and Railway Variables in production) and documented as an empty placeholder in `backend/.env.example`.
 - **Never Exposed to Clients:** The key is **never** placed in `VITE_*` (web) or `EXPO_PUBLIC_*` (mobile) environment variables, ensuring it cannot be inspected in browser DevTools, network requests, or decompiled mobile bundles.
 - **Server-Side Data Grounding:** The client only sends `{ "term": "2024/2025" }`. The backend reads authentic grade and enrollment rows directly from SQLite/Turso so a client cannot spoof grades or inject arbitrary prompts.
