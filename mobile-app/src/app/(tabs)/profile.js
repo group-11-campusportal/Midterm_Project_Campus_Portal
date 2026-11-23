@@ -31,12 +31,12 @@ export default function ProfileScreen() {
 
   const isStudent = user?.role !== 'administrator'
 
-  const displayName = user?.name || (isStudent ? 'Andi Pratama' : 'Dr. Sarah Wijaya')
-  const displayId = user?.studentId || user?.staffId || (isStudent ? 'CS2023001' : 'STF-8801')
-  const displayProgram = user?.program || (isStudent ? 'Computer Science' : 'Academic Affairs')
-  const displayYear = user?.year ? `Year ${user.year} · Junior` : (isStudent ? 'Year 3 · Junior' : 'Lead Administrator')
+  const displayName = user?.name || '—'
+  const displayId = user?.studentId || user?.staffId || '—'
+  const displayProgram = user?.program || user?.department || '—'
+  const displayYear = user?.year ? `Year ${user.year}` : (user?.title || '—')
 
-  const gpaValue = gpa != null ? (typeof gpa === 'number' ? gpa.toFixed(2) : String(gpa)) : '3.60'
+  const gpaValue = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
 
   const initials = displayName
     .split(' ')
@@ -241,7 +241,7 @@ export default function ProfileScreen() {
             <View style={styles.securityBox}>
               <View style={styles.securityRow}>
                 <Ionicons name="server-outline" size={14} color={colors.muted} />
-                <Text style={styles.securityText}>API: {API_URL || 'http://localhost:3000'}</Text>
+                <Text style={styles.securityText}>API: {API_URL || 'Not configured (.env)'}</Text>
               </View>
               <View style={styles.securityRow}>
                 <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />

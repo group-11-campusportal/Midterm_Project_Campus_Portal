@@ -38,7 +38,7 @@ export default function TabsLayout() {
           marginTop: 2,
         },
         tabBarIconStyle: {
-          width: 52,
+          width: 48,
           height: 30,
         },
         tabBarStyle: {
@@ -88,6 +88,18 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="advisor"
+        options={{
+          title: 'AI Advisor',
+          tabBarLabel: 'AI Advisor',
+          // Hidden from students because POST /api/ai/at-risk-summary is admin-only (403).
+          href: isStudent ? null : '/advisor',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="sparkles" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'My Profile',
@@ -107,13 +119,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bfdbfe',
     borderRadius: 14,
-    width: 48,
+    width: 44,
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inactiveIconWrap: {
-    width: 48,
+    width: 44,
     height: 28,
     alignItems: 'center',
     justifyContent: 'center',
