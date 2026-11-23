@@ -10,9 +10,10 @@ function RootNavigator() {
   const signedIn = status === 'signedIn'
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {/* The guard decides which screens exist: no token, no tabs. */}
+      {/* The guard decides which screens exist: no token, no tabs or detail screens. */}
       <Stack.Protected guard={signedIn} redirectTo="/login">
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="course/[id]" />
         {/* Presented over the tabs so the course list keeps its scroll position behind it. */}
         <Stack.Screen name="enroll" options={{ presentation: 'modal' }} />
       </Stack.Protected>

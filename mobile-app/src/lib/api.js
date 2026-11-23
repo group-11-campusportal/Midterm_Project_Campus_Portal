@@ -1,6 +1,7 @@
 import { API_URL, apiUrlProblem, usesLocalhost } from './config'
 
-const TIMEOUT_MS = 20000 // Render's free tier can take ~15 s to wake up.
+const TIMEOUT_MS = 20000
+const AI_TIMEOUT_MS = 30000 // Backend Gemini advisor allows up to 25 s including retry/fallback.
 
 export class ApiError extends Error {
   constructor(status, code, message) {
@@ -26,7 +27,10 @@ export function onUnauthorized(handler) {
   }
 }
 
-export async function apiFetch(path, { method = 'GET', body, auth = true } = {}) {
+export async function apiFetch(
+  path,
+  { method = 'GET', body, auth = true, timeoutMs = TIMEOUT_MS } = {},
+) {
   const problem = apiUrlProblem()
   if (problem) throw new ApiError(0, 'CONFIG', problem)
 
@@ -35,7 +39,7 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
   if (auth && currentToken) headers.Authorization = `Bearer ${currentToken}`
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   let response
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -46,10 +50,10 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
     })
   } catch (error) {
     const message = error?.name === 'AbortError'
-      ? 'The server took too long to answer. If it is on Render, it may be waking up: try again.'
+      ? 'The server took too long to answer. Please try again.'
       : usesLocalhost
         ? `Network request failed. ${API_URL} on a phone only works over USB after: adb reverse tcp:3000 tcp:3000`
-        : `Network request failed. Check EXPO_PUBLIC_API_URL (${API_URL}) and that the backend is running.`
+        : `Network request failed. Check EXPO_PUBLIC_API_URL (${API_URL}) and your internet connection.`
     throw new ApiError(0, 'NETWORK', message)
   } finally {
     clearTimeout(timer)
@@ -80,13 +84,20 @@ export const api = {
     apiFetch('/api/auth/login', { method: 'POST', body: { username, password }, auth: false }),
   me: () => apiFetch('/api/auth/me'),
   courses: () => apiFetch('/api/courses').then((r) => r.data),
+  course: (id) => apiFetch(`/api/courses/${encodeURIComponent(id)}`).then((r) => r.data),
   enrollments: () => apiFetch('/api/enrollments').then((r) => r.data),
   createEnrollment: (courseId) =>
     apiFetch('/api/enrollments', { method: 'POST', body: { courseId } }).then((r) => r.data),
   grades: () => apiFetch('/api/grades').then((r) => r.data),
   updateEnrollmentStatus: (id, status) =>
-    apiFetch(`/api/enrollments/${id}/status`, {
+    apiFetch(`/api/enrollments/${encodeURIComponent(id)}/status`, {
       method: 'PATCH',
       body: { status },
     }),
+  aiAtRiskSummary: (term) =>
+    apiFetch('/api/ai/at-risk-summary', {
+      method: 'POST',
+      body: { term },
+      timeoutMs: AI_TIMEOUT_MS,
+    }).then((r) => r.data),
 }

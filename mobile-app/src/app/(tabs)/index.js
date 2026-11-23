@@ -311,15 +311,22 @@ export default function DashboardScreen() {
         const isFull = item.enrolled >= item.capacity
         return (
           <View style={styles.courseItemWrap}>
-            <ListRow
-              badgeText={item.code}
-              title={item.title}
-              subtitle={`${item.instructor} · Term ${item.term}`}
-              meta={`${item.credits} Credits`}
-              progress={{ current: item.enrolled, max: item.capacity }}
-            />
-            {/* Students get the entry point to the enrollment form; a row that already has a
-                request, or a full course, says so instead of offering a button that would fail. */}
+            <Pressable
+              onPress={() => router.push(`/course/${item.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`View details for ${item.code} ${item.title}`}
+              style={({ pressed }) => [pressed && styles.enrollButtonPressed]}
+            >
+              <ListRow
+                badgeText={item.code}
+                title={item.title}
+                subtitle={`${item.instructor} · Term ${item.term}`}
+                meta={`${item.credits} Credits`}
+                progress={{ current: item.enrolled, max: item.capacity }}
+                right={<Ionicons name="chevron-forward" size={18} color={colors.muted} />}
+              />
+            </Pressable>
+            {/* Main flow: course list -> course detail -> enroll. */}
             {isStudent ? (
               <View style={styles.courseActionRow}>
                 {existingStatus ? (
@@ -340,18 +347,16 @@ export default function DashboardScreen() {
                   </View>
                 ) : (
                   <Pressable
-                    onPress={() =>
-                      router.push({ pathname: '/enroll', params: { courseId: item.id } })
-                    }
+                    onPress={() => router.push(`/course/${item.id}`)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Enroll in ${item.code}`}
+                    accessibilityLabel={`View details and enroll in ${item.code}`}
                     style={({ pressed }) => [
                       styles.enrollButton,
                       pressed && styles.enrollButtonPressed,
                     ]}
                   >
                     <Ionicons name="add-circle" size={17} color={colors.primary} />
-                    <Text style={styles.enrollButtonText}>Enroll</Text>
+                    <Text style={styles.enrollButtonText}>Details & Enroll</Text>
                   </Pressable>
                 )}
               </View>

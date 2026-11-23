@@ -18,7 +18,7 @@ Scan the QR code with Expo Go (Android) or the Camera app (iPhone). Phone and la
 | Backend | `EXPO_PUBLIC_API_URL` |
 |---|---|
 | Local, on your laptop | `http://<your laptop LAN IP>:3000` (Windows: `ipconfig` → IPv4). Start the backend with `HOST=0.0.0.0` in `backend/.env`, otherwise it only listens on the laptop itself |
-| Deployed | The Render URL, for example `https://campus-portal-api.onrender.com` |
+| Deployed | The Railway URL: `https://midtermprojectcampusportal-production.up.railway.app` |
 
 `localhost` on a phone means the phone itself, so it only works over USB (Android) after `adb reverse tcp:3000 tcp:3000` and `adb reverse tcp:8081 tcp:8081`, started with `npx expo start -c --localhost`. Use this when the Wi-Fi blocks device-to-device traffic (campus/public Wi-Fi). After changing `.env` press `r`; if the old address is still used, run `npx expo start -c`.
 
@@ -31,8 +31,9 @@ src/
   app/                  every file is a screen (Expo Router)
     _layout.js          AuthProvider + route guard (logged out → login, logged in → tabs)
     login.js
-    enroll.js           enrollment form, presented as a modal from a course row
-    (tabs)/             Courses, My enrollments, My grades, Profile (log out)
+    course/[id].js      course detail view + one-tap enrollment (course list → detail → enroll)
+    enroll.js           enrollment form modal
+    (tabs)/             Courses, My enrollments, My grades, AI Advisor (admin), Profile (log out)
   context/AuthContext.js  useAuth(): status, user, gpa, signIn, signOut, clearSession
   lib/
     config.js           reads and validates EXPO_PUBLIC_API_URL

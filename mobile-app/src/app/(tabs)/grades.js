@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useState } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
   Pressable,
@@ -10,7 +11,7 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import ListRow from '../../components/ListRow'
+import ListRow, { StatusBadge } from '../../components/ListRow'
 import { EmptyView, ErrorView, LoadingView } from '../../components/StateView'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
@@ -21,32 +22,55 @@ export default function GradesScreen() {
   const { user, gpa, refreshMe } = useAuth()
   const insets = useSafeAreaInsets()
   const isAdmin = user?.role === 'administrator'
-  const [activeTab, setActiveTab] = useState('courses') // 'courses' | 'grades'
+  const [activeTab, setActiveTab] = useState('grades') // 'grades' | 'courses'
 
   const { items: grades, error, refreshing, reload, refresh } = useApiList(api.grades)
-  const { refresh: refreshEnrollments } = useApiList(api.enrollments)
+  const {
+    items: enrollments,
+    refreshing: enrollmentsRefreshing,
+    refresh: refreshEnrollments,
+  } = useApiList(api.enrollments)
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     await Promise.allSettled([refresh(), refreshEnrollments(), refreshMe()])
-  }
+  }, [refresh, refreshEnrollments, refreshMe])
+
+  const firstFocus = useRef(true)
+  useFocusEffect(
+    useCallback(() => {
+      if (firstFocus.current) {
+        firstFocus.current = false
+        return
+      }
+      onRefresh()
+    }, [onRefresh]),
+  )
+
+  const approvedCourses = useMemo(
+    () => (enrollments || []).filter((e) => e.status === 'approved'),
+    [enrollments],
+  )
 
   if (!grades && error) return <ErrorView message={error} onRetry={reload} />
   if (!grades) return <LoadingView label="Loading academic records…" />
 
   const totalCredits = (grades || []).reduce((s, g) => s + (g.credits || 0), 0)
-  const courseCount = grades?.length ?? 0
+  const gradedCount = grades?.length ?? 0
+  const activeCourseCount = approvedCourses.length
+  const gpaDisplay = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
+  const listData = !isAdmin && activeTab === 'courses' ? approvedCourses : grades
 
   return (
     <FlatList
-      data={grades}
-      keyExtractor={(grade) => String(grade.id)}
+      data={listData}
+      keyExtractor={(item) => String(item.id)}
       contentContainerStyle={[
         styles.list,
         { paddingTop: Math.max(insets.top, 16) },
       ]}
       refreshControl={
         <RefreshControl
-          refreshing={refreshing}
+          refreshing={refreshing || enrollmentsRefreshing}
           onRefresh={onRefresh}
           tintColor={colors.primary}
         />
@@ -82,69 +106,20 @@ export default function GradesScreen() {
             {/* Prominent Degree Progress Banner */}
             <View style={styles.prominentCard}>
               <View style={styles.prominentLeft}>
-                <Text style={styles.prominentTitle}>Degree Audit & Enrolled Units</Text>
+                <Text style={styles.prominentTitle}>Degree Audit & Graded Units</Text>
                 <Text style={styles.prominentSub}>
-                  {courseCount} Enrolled Courses · {totalCredits} SKS Credits
+                  {gradedCount} Graded Course{gradedCount === 1 ? '' : 's'} · {totalCredits} SKS Credits
                 </Text>
               </View>
               <View style={styles.prominentArrow}>
-                <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+                <Ionicons name="school-outline" size={16} color="#ffffff" />
               </View>
             </View>
           </LinearGradient>
 
-          {/* Academic Document Export Card */}
-          {!isAdmin ? (
-            <View style={[styles.examCard, shadow.sm]}>
-              <View style={styles.examTopRow}>
-                <View style={styles.examTextWrap}>
-                  <Text style={styles.examTitle}>Examination & Term Schedule</Text>
-                  <Text style={styles.examSub}>
-                    Midterm examination verifications assigned · All course schedules active
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-              </View>
-
-              <View style={styles.examDivider} />
-
-              <Pressable style={styles.ksmButton}>
-                <Ionicons name="document-text-outline" size={16} color="#1d4ed8" />
-                <Text style={styles.ksmButtonText}>
-                  Export Official Academic Record (PDF)
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-
           {/* 2-Segmented Modern Navigation Toggle */}
           {!isAdmin ? (
             <View style={styles.toggleRow}>
-              <Pressable
-                style={[
-                  styles.toggleTab,
-                  activeTab === 'courses' && styles.toggleTabActive,
-                ]}
-                onPress={() => setActiveTab('courses')}
-              >
-                <Text
-                  style={[
-                    styles.toggleTabText,
-                    activeTab === 'courses' && styles.toggleTabTextActive,
-                  ]}
-                >
-                  Current Courses
-                </Text>
-                <Text
-                  style={[
-                    styles.toggleTabCount,
-                    activeTab === 'courses' && styles.toggleTabCountActive,
-                  ]}
-                >
-                  {courseCount} Active
-                </Text>
-              </Pressable>
-
               <Pressable
                 style={[
                   styles.toggleTab,
@@ -158,7 +133,7 @@ export default function GradesScreen() {
                     activeTab === 'grades' && styles.toggleTabTextActive,
                   ]}
                 >
-                  Grade Transcript
+                  My Grades
                 </Text>
                 <Text
                   style={[
@@ -166,79 +141,86 @@ export default function GradesScreen() {
                     activeTab === 'grades' && styles.toggleTabCountActive,
                   ]}
                 >
-                  GPA {gpa != null ? (typeof gpa === 'number' ? gpa.toFixed(2) : gpa) : '3.60'}
+                  GPA {gpaDisplay}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.toggleTab,
+                  activeTab === 'courses' && styles.toggleTabActive,
+                ]}
+                onPress={() => setActiveTab('courses')}
+              >
+                <Text
+                  style={[
+                    styles.toggleTabText,
+                    activeTab === 'courses' && styles.toggleTabTextActive,
+                  ]}
+                >
+                  Approved Courses
+                </Text>
+                <Text
+                  style={[
+                    styles.toggleTabCount,
+                    activeTab === 'courses' && styles.toggleTabCountActive,
+                  ]}
+                >
+                  {activeCourseCount} Active
                 </Text>
               </Pressable>
             </View>
           ) : null}
 
           {/* If Grade Transcript is selected: Render GPA Hero Card */}
-          {activeTab === 'grades' && !isAdmin && gpa != null ? (
-            <GpaCard gpa={gpa} totalCredits={totalCredits} count={courseCount} />
+          {activeTab === 'grades' && !isAdmin && gpa != null && gradedCount > 0 ? (
+            <GpaCard gpa={gpa} totalCredits={totalCredits} count={gradedCount} />
           ) : null}
         </View>
       }
       ListEmptyComponent={
         <EmptyView
-          title="No records found"
-          message="Courses and official grades recorded for this term will appear here."
+          title={activeTab === 'courses' && !isAdmin ? 'No approved courses yet' : 'No grades recorded yet'}
+          message={
+            activeTab === 'courses' && !isAdmin
+              ? 'Courses approved by the registrar will appear here.'
+              : 'Official grades recorded for your approved enrollments will appear here.'
+          }
         />
       }
       renderItem={({ item }) => {
         if (activeTab === 'courses' && !isAdmin) {
-          // Sleek original Course Card
           return (
-            <View style={[styles.courseCard, shadow.sm]}>
-              <View style={styles.courseHeader}>
-                <View style={styles.courseTitleWrap}>
-                  <Text style={styles.courseTitleText}>
-                    {item.courseCode} · {item.courseTitle}
-                  </Text>
-                  <Text style={styles.courseInstructorText}>
-                    {item.instructor || 'Faculty Professor'}
-                  </Text>
-                </View>
-                <View style={styles.courseCreditsBadge}>
-                  <Text style={styles.courseCreditsText}>{item.credits} SKS</Text>
-                </View>
-              </View>
-
-              <View style={styles.courseMetricsRow}>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Attendance</Text>
-                  <Text style={styles.metricValue}>14 of 14 (100%)</Text>
-                </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Absence Quota</Text>
-                  <Text style={styles.metricValueGood}>0 Used (3 Max)</Text>
-                </View>
-                <View style={styles.metricDivider} />
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricLabel}>Schedule</Text>
-                  <Text style={styles.metricValueSchedule}>Mon 08:00 · F802</Text>
-                </View>
-              </View>
+            <View style={styles.rowWrap}>
+              <ListRow
+                badgeText={item.courseCode}
+                title={item.courseTitle}
+                subtitle={`Term ${item.term}`}
+                meta={`${item.credits} SKS Credits · Enrolled ${item.enrolledAt ?? ''}`}
+                right={<StatusBadge status={item.status} />}
+              />
             </View>
           )
         }
 
         // Render Grade Row with Letter Badge
         return (
-          <ListRow
-            badgeText={item.courseCode}
-            title={item.courseTitle}
-            subtitle={isAdmin ? `${item.studentName} (${item.studentId})` : `Term ${item.term}`}
-            meta={`${item.credits} Credits · Raw Score: ${item.score}`}
-            right={
-              <View style={styles.gradeBadge}>
-                <Text style={styles.letter}>{item.letter ?? '-'}</Text>
-                {item.points != null ? (
-                  <Text style={styles.points}>{Number(item.points).toFixed(1)} pts</Text>
-                ) : null}
-              </View>
-            }
-          />
+          <View style={styles.rowWrap}>
+            <ListRow
+              badgeText={item.courseCode}
+              title={item.courseTitle}
+              subtitle={isAdmin ? `${item.studentName} (${item.studentId})` : `Term ${item.term}`}
+              meta={`${item.credits} Credits · Raw Score: ${item.score}`}
+              right={
+                <View style={styles.gradeBadge}>
+                  <Text style={styles.letter}>{item.letter ?? '-'}</Text>
+                  {item.points != null ? (
+                    <Text style={styles.points}>{Number(item.points).toFixed(1)} pts</Text>
+                  ) : null}
+                </View>
+              }
+            />
+          </View>
         )
       }}
       ListFooterComponent={
@@ -325,6 +307,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     flexGrow: 1,
     backgroundColor: colors.background,
+  },
+  rowWrap: {
+    paddingHorizontal: spacing.md,
   },
   headerWrap: {
     gap: spacing.md,
