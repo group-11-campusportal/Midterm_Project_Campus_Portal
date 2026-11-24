@@ -27,6 +27,8 @@ function buildNavItems(role) {
     })
   }
 
+  items.push({ to: '/profile', label: 'Profile', icon: 'profile' })
+
   return items
 }
 
@@ -48,6 +50,15 @@ function NavIcon({ name }) {
         <path d="M4 2.5h8l4 4V17.5H4z" />
         <path d="M12 2.5v4h4" />
         <path d="M6.5 13.5h7M6.5 10.5h4" />
+      </svg>
+    )
+  }
+
+  if (name === 'profile') {
+    return (
+      <svg className="sidebar__icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="10" cy="6.5" r="3.5" />
+        <path d="M3 17.5c.8-3.3 3.6-5 7-5s6.2 1.7 7 5" />
       </svg>
     )
   }

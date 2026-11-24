@@ -28,7 +28,8 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="dark" />
+        {/* Every screen starts with a dark blue header under the status bar. */}
+        <StatusBar style="light" />
         <RootNavigator />
       </AuthProvider>
     </SafeAreaProvider>
