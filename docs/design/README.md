@@ -8,12 +8,11 @@ Mochamad Fasya Fadillah, Ramadhan Islamay Dermawan.
 | Part | URL | Status |
 |---|---|---|
 | Web app (GitHub Pages) | <https://group-11-campusportal.github.io/Midterm_Project_Campus_Portal/> | live |
-| API (Render) | `https://campus-portal-api.onrender.com` (from `render.yaml`) | **not deployed yet** — task A4; `/api/health` does not answer |
+| API (Railway) | <https://midtermprojectcampusportal-production.up.railway.app> | live — `/api/health` answers `{"status":"ok","database":"ok"}` |
 | Phone app | not hosted; runs in Expo Go from `mobile-app/` | see `mobile-app/README.md` |
-| Database | Turso, region nearest Singapore | created, not yet seeded from Render (A2–A3) |
+| Database | Turso, region nearest Singapore | live, used by the Railway API |
 
-The API sleeps after ~15 minutes on Render's free tier. The first request afterwards can take
-30–60 seconds; the phone client waits 20 seconds and then offers a retry.
+If the API is slow right after a deploy, the phone client waits 20 seconds and then offers a retry.
 
 Seed accounts (present in every seeded database):
 
@@ -34,7 +33,7 @@ database, so a request made on the phone appears in the browser on the next refr
 ## 2. Scope of this milestone (Week 13)
 
 **In:** real login with a JWT, hostnames for the clients, every list and form on the web backed by
-the API, the phone app reading the same API, a hosted database that survives a Render restart, and
+the API, the phone app reading the same API, a hosted database that survives a Railway restart, and
 one written contract that both clients follow.
 
 **Out (stated, not hidden):** payments, file uploads, notifications, password reset, refresh tokens,

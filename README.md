@@ -9,12 +9,11 @@ requests a seat in a course; an administrator approves requests, records grades 
 | Part | URL |
 |---|---|
 | Web app | <https://group-11-campusportal.github.io/Midterm_Project_Campus_Portal/> |
-| API | `https://campus-portal-api.onrender.com` — **not deployed yet** (task A4); check `/api/health` |
+| API | <https://midtermprojectcampusportal-production.up.railway.app> — live on Railway; check `/api/health` |
 | Phone app | not hosted; runs in Expo Go from [`mobile-app/`](mobile-app/README.md) |
 | Database | Turso in production, a local SQLite file in development |
 
-The API's free Render instance sleeps after ~15 minutes; the first request afterwards can take
-30–60 seconds.
+The API runs on Railway with the Turso database. If a request is slow right after a deploy, retry once.
 
 Design Document: [`docs/design/README.md`](docs/design/README.md) ·
 Status: [`PROGRESS.md`](PROGRESS.md) · Agent rules: [`AGENTS.md`](AGENTS.md) ·
@@ -102,11 +101,12 @@ docs/wireframes/    SVG wireframes
 
 ## Deploy
 
-- **API** — Render blueprint in [`render.yaml`](render.yaml): root `backend/`, `npm ci`, `npm start`,
-  health check `/api/health`, secrets typed into the dashboard. Production is seeded once from the
-  command line; see [`backend/README.md`](backend/README.md).
-- **Web** — `.github/workflows/deploy.yml` builds `main` and publishes `dist/` to `gh-pages`. Set
-  `VITE_API_URL` for that build, otherwise the app falls back to `localhost`.
+- **API** — Railway service with root `backend/`, `npm ci`, `npm start`, health check `/api/health`,
+  secrets in the Railway service's Variables; see [`backend/README.md`](backend/README.md).
+  `render.yaml` is an unused earlier blueprint.
+- **Web** — `.github/workflows/deploy.yml` builds `main` and publishes `dist/` to `gh-pages`. The workflow
+  sets `VITE_API_URL` to the Railway URL (override with the repository variable `API_URL`);
+  without it the bundle falls back to `127.0.0.1`.
 - **CORS** — the API only accepts origins listed in `CORS_ORIGIN`. A new web URL must be added there.
 
 ## Team

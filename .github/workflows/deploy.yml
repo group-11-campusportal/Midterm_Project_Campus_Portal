@@ -26,6 +26,10 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+        env:
+          # Baked into dist/ at build time (Vite). Without it the bundle calls http://127.0.0.1:3000.
+          # Override with a repository variable API_URL if the backend moves.
+          VITE_API_URL: ${{ vars.API_URL || 'https://midtermprojectcampusportal-production.up.railway.app' }}
       - run: touch dist/.nojekyll
       - uses: peaceiris/actions-gh-pages@v4
         with:

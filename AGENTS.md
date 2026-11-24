@@ -32,7 +32,7 @@ cd mobile-app && cp .env.example .env && npm install && npx expo start
 ```
 
 Seed accounts (`backend/src/seed-data.js`): `admin` / `admin123`, `andi` / `student123`,
-`bella` / `student123`. They exist in every database, local and Render.
+`bella` / `student123`. They exist in every seeded local database.
 
 ## Where the API address comes from
 
@@ -44,7 +44,7 @@ Seed accounts (`backend/src/seed-data.js`): `admin` / `admin123`, `andi` / `stud
 
 - Changing either variable needs a restart, and for Expo a cache clear: `npx expo start -c`.
 - `localhost` in the phone app means the phone. On a real device use the laptop's LAN IP
-  (with `HOST=0.0.0.0` on the API) or the deployed Render URL, or USB with
+  (with `HOST=0.0.0.0` on the API) or the deployed Railway URL, or USB with
   `adb reverse tcp:3000 tcp:3000`.
 - The API only accepts origins listed in `CORS_ORIGIN`. A new deployed web URL must be added
   there by Bian, or every request fails in the browser with a CORS error.
@@ -67,7 +67,7 @@ Two more rules the API keeps and clients must not work around:
 
 - `.env` is ignored by git. Only `.env.example` (names, no values) is committed.
 - Never paste `JWT_SECRET`, `TURSO_AUTH_TOKEN` or an AI provider key into source, a screenshot, a
-  commit message or a chat. Production values live in the Render dashboard only.
+  commit message or a chat. Production values live in the Railway service's Variables only.
 - Never put the Turso URL/token in a laptop `.env`; production is seeded once from the command line
   (`backend/README.md`).
 - Server-side only: any future AI feature calls its provider from `backend/`, never from `src/` or
@@ -88,7 +88,7 @@ Two more rules the API keeps and clients must not work around:
 |---|---|---|
 | Web app on Pages calls `localhost` | `VITE_API_URL` was not set when `npm run build` ran | rebuild with the variable set |
 | Phone shows the old API URL | Metro cached the bundle | `npx expo start -c` |
-| First request takes ~30 s, then works | Render free instance was asleep | retry; the phone client already waits 20 s |
+| First request takes long, then works | API was redeploying or cold | retry; the phone client already waits 20 s |
 | Deployed web app: CORS error | its origin is missing from `CORS_ORIGIN` | Bian adds it, restart the service |
 | `401` then a blank screen | expected — `apiFetch` clears the token | check the login screen appeared |
 | `SQLITE_CONSTRAINT` on a second enrollment | duplicate `(student_id, course_id)` | show the 409 message, do not retry |

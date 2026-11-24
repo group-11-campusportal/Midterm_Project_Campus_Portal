@@ -8,15 +8,14 @@ else can repeat it from this page alone.
 
 | Prerequisite | Check |
 |---|---|
-| API deployed (A4) | `curl -s https://campus-portal-api.onrender.com/api/health` → `{"status":"ok","database":"ok"}` |
+| API deployed (A4) | `curl -s https://midtermprojectcampusportal-production.up.railway.app/api/health` → `{"status":"ok","database":"ok"}` |
 | Production seeded once (A3) | `admin`, `andi`, `bella` log in on the deployed API |
-| Web deployed with `VITE_API_URL` (A6) | DevTools → Network shows requests to `…onrender.com`, not `localhost` |
+| Web deployed with `VITE_API_URL` (A6) | DevTools → Network shows requests to `…up.railway.app`, not `localhost` |
 | Deployed web origin in `CORS_ORIGIN` | no CORS error in the browser console |
-| Phone `.env` points at Render | `EXPO_PUBLIC_API_URL=https://…onrender.com`, then `npx expo start -c` |
+| Phone `.env` points at Railway | `EXPO_PUBLIC_API_URL=https://midtermprojectcampusportal-production.up.railway.app`, then `npx expo start -c` |
 | One iPhone **and** one Android with Expo Go | both on mobile data for case 8 |
 
-Wake the API first: Render's free instance sleeps after ~15 minutes and the first request afterwards
-can take 30–60 seconds. Do not start recording before the health check answers.
+Check the API first. Do not start recording before the health check answers.
 
 ## 1. Environment
 
@@ -31,7 +30,7 @@ can take 30–60 seconds. Do not start recording before the health check answers
 Format: **do this → expect exactly this**.
 
 ### Case 1 — Health and database
-`GET https://…onrender.com/api/health`
+`GET https://…up.railway.app/api/health`
 → `200` with `{"status":"ok","database":"ok"}`. A `500` here means the database is down: nothing else
 in this script can pass.
 
@@ -48,7 +47,7 @@ two was wrong, and no token is stored (reloading the page still shows login).
 ### Case 4 — Lists come from the API
 Log in as `andi` on the web
 → DevTools → Network: `POST /api/auth/login`, then `GET /api/courses`, `GET /api/enrollments`,
-`GET /api/grades`, `GET /api/auth/me` — all to `…onrender.com` with a `Authorization: Bearer …`
+`GET /api/grades`, `GET /api/auth/me` — all to `…up.railway.app` with a `Authorization: Bearer …`
 header (login and health excepted). Nothing is read from `src/data/`.
 
 ### Case 5 — Web and phone show the same rows
@@ -90,7 +89,7 @@ errors appear under the field, never in a system alert.
 ### Case 11 — Another student's data
 Copy one of `bella`'s enrollment or grade ids from the browser (as `admin`), then call it with
 `andi`'s token:
-`curl -s https://…onrender.com/api/enrollments/<bella-id> -H "Authorization: Bearer <andi-token>"`
+`curl -s https://…up.railway.app/api/enrollments/<bella-id> -H "Authorization: Bearer <andi-token>"`
 → `404 NOT_FOUND`, never `200`. The same with `GET /api/enrollments` and `GET /api/grades` returns
 only `andi`'s rows.
 
@@ -107,15 +106,15 @@ Each one must be shown by someone who did not build that part.
 | # | Check | Command or action | Pass means |
 |---|---|---|---|
 | 1 | API answers at a public URL | `curl` the health route from a phone hotspot | `{"status":"ok","database":"ok"}` |
-| 2 | Data lives in the hosted database | create an enrollment, restart the Render service from its dashboard, read the row again | the row is still there |
-| 3 | Web reads the deployed API | open the GitHub Pages URL with DevTools open | every request goes to `…onrender.com`, no CORS error |
+| 2 | Data lives in the hosted database | create an enrollment, restart the Railway service, read the row again | the row is still there |
+| 3 | Web reads the deployed API | open the GitHub Pages URL with DevTools open | every request goes to `…up.railway.app`, no CORS error |
 | 4 | Both platforms read it | iPhone **and** Android on mobile data | same rows as the browser |
 | 5 | Secrets are not in the repository | `git log -S "TURSO_AUTH_TOKEN" --oneline` and a search of the repo for `JWT_SECRET=` | no real value in history or in any file except `.env` on a laptop (ignored) |
 
 ## 4. When something fails
 
 1. Note the case number, the client, the account, the exact message on screen and the time.
-2. Read the logs in this order: Render → Logs (server error and stack), then the browser's Network or
+2. Read the logs in this order: Railway → Deploy Logs (server error and stack), then the browser's Network or
    the Expo terminal (client error), then the database (is the row there?).
 3. Add it to `Known bugs` in `PROGRESS.md` with an impact and a next step — not a fix commit on the
    day of the demo.
@@ -133,4 +132,4 @@ Record once, on a phone with Wi-Fi off, with the deployed API already awake:
 6. Record a grade as `admin`, then show it on the phone with its letter and points.
 
 Upload it unlisted and put the link in `PROGRESS.md`. It is the fallback when the campus Wi-Fi or
-Render fails during the demo.
+Railway fails during the demo.

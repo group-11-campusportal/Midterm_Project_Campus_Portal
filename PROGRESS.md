@@ -2,7 +2,7 @@
 
 Living status for Week 13 (S52 milestone: the API answers at a public URL with a hosted database, and
 both the web app and a phone on mobile data read from it). Updated by whoever merges the change.
-Status date: **18 November 2026**.
+Status date: **24 November 2026**.
 
 ## Done
 
@@ -11,7 +11,7 @@ Status date: **18 November 2026**.
 | API | Express 5 + JWT API: health, login, me, students, courses, enrollments (create/approve/reject/withdraw), grades (create/update/delete), scoped by token | `backend/src/app.js`, `backend/test/api.test.js` (`npm test`) |
 | Database | One `@libsql/client` driver for a local SQLite file and Turso; schema v1 with FK rules, capacity checks, one grade per enrollment | `backend/src/schema.sql`, `backend/src/store.js` |
 | Seed | 3 accounts, 6 courses, 8 enrollments, 4 grades; seeding an already-filled database changes nothing | `backend/src/seed-data.js` |
-| Deploy config | Render blueprint: root `backend`, `npm ci` / `npm start`, health check `/api/health`, secrets from the dashboard | `render.yaml`, `backend/README.md` |
+| Deploy | API on Railway with Turso; root `backend`, `npm ci` / `npm start`, health check `/api/health`, secrets in Railway Variables | `backend/README.md` |
 | Web | Real login, session restore from `localStorage`, all lists from the API, create enrollment, record grade, approve/reject with reload-safe status | `src/lib/api.js`, `src/App.jsx`, `src/pages/*` |
 | Web deploy | GitHub Actions builds `main` and publishes `dist/` to `gh-pages`; `HashRouter` + `base: './'` make deep links refreshable | `.github/workflows/deploy.yml`, `vite.config.js` |
 | Mobile | Expo Router skeleton, `AuthProvider`, JWT in `expo-secure-store`, login/logout, dashboard, enrollments (admin approve/reject), grades, profile, pull-to-refresh, 401 → login | `mobile-app/src/` |
@@ -21,18 +21,18 @@ Status date: **18 November 2026**.
 
 ## Next
 
-Order matters: the Render URL unblocks the web build and the phone, and nothing is "done" until the
-test script has been run against the deployed system.
+The API is live on Railway (`https://midtermprojectcampusportal-production.up.railway.app`, Turso
+database). Nothing is "done" until the test script has been run against the deployed system.
 
 | # | Task | Owner | Blocked by |
 |---|---|---|---|
-| 1 | Render deploy of the API, then Turso seed once | Bian | Turso token |
-| 2 | Add the deployed web origin to `CORS_ORIGIN` | Bian | web URL |
-| 3 | `VITE_API_URL` at build time (Pages) or Vercel deploy | David | Render URL |
-| 4 | Phone pointed at Render, checked on iPhone **and** Android with Wi-Fi off | Fasya | Render URL |
+| 1 | ~~Deploy the API with Turso~~ done on Railway | Bian | — |
+| 2 | ~~Deployed web origin in `CORS_ORIGIN`~~ done (`https://group-11-campusportal.github.io`) | Bian | — |
+| 3 | `VITE_API_URL` set in `deploy.yml`; confirm the Pages bundle calls Railway after the next deploy | Fasya / David | merge |
+| 4 | Phone pointed at Railway, checked on iPhone **and** Android with Wi-Fi off | Fasya | — |
 | 5 | Branch protection on `main` (PR + 1 review) | Fasya | — |
-| 6 | Run the test script and the five deployment checks, then fill the table below | everyone | 1–4 |
-| 7 | Walks through checklist A–J are prepared: one live flow per member | everyone | 1–4 |
+| 6 | Run the test script and the five deployment checks, then fill the table below | everyone | 3–4 |
+| 7 | Walks through checklist A–J are prepared: one live flow per member | everyone | 3–4 |
 
 Contact the API after deploying so nobody develops against a dead URL: `GET /api/health` must answer.
 
@@ -40,12 +40,12 @@ Contact the API after deploying so nobody develops against a dead URL: `GET /api
 
 | # | Problem | Impact | Workaround / next step |
 |---|---|---|---|
-| 1 | API still runs on Render's free tier with Turso **not yet wired in production** | data is lost on every restart until A4 lands | deployment check 2 in `docs/test-script.md` is the proof |
-| 2 | Admin cannot create/edit courses or students from the phone | acceptable for now: the brief puts management on the web | say so in the demo, do not claim it |
+| 1 | Pages bundle built before 24 Nov calls `http://127.0.0.1:3000` | deployed web app cannot log in | fixed in `deploy.yml`; redeploy and check DevTools → Network |
+| 2 | Admin can record grades on web and phone (Grades → Record Grade), but cannot create/edit courses or edit/delete grades on either; no client uses the course CRUD routes | "manages courses" is not demonstrable | say so in the demo, do not claim it |
 | 3 | `src/data/*.js` is now unused dead data | misleading for a reviewer of checklist C | delete in a small `chore/web-remove-hardcoded-data` PR |
-| 4 | Root `README.md` still describes the app as "front-end only, hardcoded" | wrong first impression | rewritten in the URLs task |
-| 5 | Render free instance sleeps after ~15 min | first tap can take 30–60 s | mobile client waits 20 s then shows a "waking up" message; wake it before the demo |
-| 6 | No lint/format gate for `mobile-app/` | style drift | cosmetic, not graded |
+| 4 | Hardcoded placeholder content on web and phone (term labels, "Dean's List", "84 / 144 SKS", tuition, UPH links) | numbers that do not come from the API | see the 24 Nov audit |
+| 5 | No login rate limit while demo passwords are public | brute force / demo account takeover if they exist in production | add a limiter; confirm production has no demo accounts |
+| 6 | No lint/format gate for `mobile-app/`; CI does not run backend tests | regressions reach `main` | add both to CI |
 
 ## Decisions
 
@@ -71,7 +71,7 @@ when the result is a failure.
 | 1 | `GET /api/health` → `{"status":"ok","database":"ok"}` | | | | | |
 | 2 | Login as `admin` shows the administrator dashboard, no Enroll action | | | | | |
 | 3 | Wrong password shows one neutral message | | | | | |
-| 4 | All list requests go to `…onrender.com` with a Bearer header | | | | | |
+| 4 | All list requests go to `…up.railway.app` with a Bearer header | | | | | |
 | 5 | Same rows and statuses on web and phone for `andi` | | | | | |
 | 6 | Approve on web → the student's phone shows `approved` after refresh, and after a page reload | | | | | |
 | 7 | Force-quit and reopen the phone app → still signed in | | — | | | |
@@ -86,7 +86,7 @@ Deployment checks, one row per check, initialled by someone who did not build th
 | # | Check | Result | Who | Date |
 |---|---|---|---|---|
 | 1 | API answers at a public URL | | | |
-| 2 | Data survives a Render restart (hosted database) | | | |
+| 2 | Data survives a Railway restart (hosted database) | | | |
 | 3 | Web reads the deployed API, no CORS error | | | |
 | 4 | iPhone **and** Android read it on mobile data | | | |
 | 5 | No secret in git history or committed files | | | |
@@ -100,7 +100,7 @@ Deployment checks, one row per check, initialled by someone who did not build th
 Process for a failure:
 
 1. Note the case number, the client, the account, the exact message on screen and the time.
-2. Read the logs in this order: Render → Logs (server error and stack), then the browser's Network or
+2. Read the logs in this order: Railway → Deploy Logs (server error and stack), then the browser's Network or
    the Expo terminal (client error), then the database (is the row there?).
 3. Add it to `Known bugs` above with an impact and a next step — not a fix commit on the day of the
    demo.
