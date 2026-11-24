@@ -5,6 +5,7 @@ import StatusBadge from '../components/StatusBadge'
 import Spinner from '../components/Spinner'
 import EnrollmentDetailModal from '../components/EnrollmentDetailModal'
 import StudentDetailModal from '../components/StudentDetailModal'
+import CourseFormModal from '../components/CourseFormModal'
 import { computeGpa } from '../utils/grade'
 
 const ENROLLMENT_FILTERS = ['All', 'Approved', 'Pending', 'Rejected']
@@ -19,12 +20,17 @@ function Dashboard({
   dataError = null,
   onRetry,
   onUpdateEnrollmentStatus,
+  onCreateCourse,
+  onUpdateCourse,
+  onDeleteCourse,
 }) {
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState(null)
   const [selectedStudentRow, setSelectedStudentRow] = useState(null)
   const [enrollmentFilter, setEnrollmentFilter] = useState('All')
   const [courseSearch, setCourseSearch] = useState('')
   const [actionError, setActionError] = useState('')
+  // null = closed, {} = new course, a course object = edit that course
+  const [courseForm, setCourseForm] = useState(null)
 
   async function handleStatusChange(enrollmentId, nextStatus) {
     setActionError('')
@@ -65,14 +71,6 @@ function Dashboard({
         c.instructor?.toLowerCase().includes(q),
     )
   }, [courses, courseSearch])
-
-  // Filtered enrollments for Student
-  const filteredStudentEnrollments = useMemo(() => {
-    if (enrollmentFilter === 'All') return myEnrollments
-    return myEnrollments.filter(
-      (e) => (e.status || '').toLowerCase() === enrollmentFilter.toLowerCase(),
-    )
-  }, [myEnrollments, enrollmentFilter])
 
   // Filtered enrollments for Administrator
   const filteredAdminEnrollments = useMemo(() => {
@@ -389,10 +387,15 @@ function Dashboard({
               </div>
               <div>
                 <h2 className="section-head__title">Course Catalog &amp; Capacity</h2>
-                <p className="section-head__sub">Live seating status across all active terms.</p>
+                <p className="section-head__sub">Live seating status across all active terms. Click a course to edit it.</p>
               </div>
             </div>
-            <span className="section-head__count">{filteredCourses.length} offerings</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span className="section-head__count">{filteredCourses.length} offerings</span>
+              <button type="button" className="btn btn--primary btn--small" onClick={() => setCourseForm({})}>
+                + Add Course
+              </button>
+            </div>
           </div>
 
           {/* Search Box */}
@@ -429,10 +432,16 @@ function Dashboard({
               const isFull = course.enrolled >= course.capacity
 
               return (
-                <div key={course.id} className="course-card">
+                <button
+                  key={course.id}
+                  type="button"
+                  className="course-card course-card--button"
+                  onClick={() => setCourseForm(course)}
+                  aria-label={`Edit ${course.code} ${course.title}`}
+                >
                   <div className="course-card__top">
                     <span className="code-pill">{course.code}</span>
-                    <span className="course-card__credits">{course.credits} Credits</span>
+                    <span className="course-card__credits">{course.credits} SKS · Edit</span>
                   </div>
                   <h3 className="course-card__title">{course.title}</h3>
                   <p className="course-card__instructor">
@@ -452,11 +461,22 @@ function Dashboard({
                       </span>
                     </div>
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
         </section>
+
+        {courseForm ? (
+          <CourseFormModal
+            key={courseForm.id ?? 'new'}
+            course={courseForm.id ? courseForm : null}
+            onClose={() => setCourseForm(null)}
+            onCreate={onCreateCourse}
+            onUpdate={onUpdateCourse}
+            onDelete={onDeleteCourse}
+          />
+        ) : null}
 
         {selectedEnrollment && (
           <EnrollmentDetailModal
@@ -476,41 +496,12 @@ function Dashboard({
   // ==========================================
   const approvedCount = myEnrollments.filter((e) => e.status === 'approved').length
   const pendingCount = myEnrollments.filter((e) => e.status === 'pending').length
-  const standingText =
-    gpa >= 3.5
-      ? "Dean's List · First Class Standing"
-      : gpa >= 3.0
-        ? 'Good Academic Standing'
-        : 'Satisfactory Standing'
-
-  const studentInitials = user.name
-    ? user.name
-        .split(' ')
-        .map((p) => p[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
-    : 'AP'
-
-  const myEnrollmentColumns = [
-    {
-      key: 'course',
-      label: 'Course',
-      render: (row) => (
-        <>
-          <span className="table__strong">{row.courseCode}</span>
-          <span className="table__muted">{row.courseTitle}</span>
-        </>
-      ),
-    },
-    { key: 'term', label: 'Term' },
-    { key: 'credits', label: 'Credits' },
-    {
-      key: 'status',
-      label: 'Status',
-      render: (row) => <StatusBadge status={row.status} />,
-    },
-  ]
+  // Student dashboard shows only courses still open to request; the full catalog with request
+  // statuses is on the Enroll in Course page.
+  const requestedCourseIds = new Set(myEnrollments.map((e) => e.courseId))
+  const availableCourses = filteredCourses
+    .filter((c) => !requestedCourseIds.has(c.id) && c.enrolled < c.capacity)
+    .sort((a, b) => a.code.localeCompare(b.code))
 
   const gradeColumns = [
     {
@@ -606,159 +597,8 @@ function Dashboard({
         </div>
       )}
 
-      <div className="dashboard-grid">
-        {/* Left Column: My Profile */}
-        <aside className="dashboard-sidebar">
-          <section className="card card--elevated profile-card">
-            <div className="profile-card__avatar-wrap">
-              <div className="profile-card__avatar">
-                <span>{studentInitials}</span>
-              </div>
-              <h3 className="profile-card__name">{user.name}</h3>
-              <p className="profile-card__email">{user.email}</p>
-              <span className="profile-card__pill">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true">
-                  <path d="M10 2l8 4-8 4-8-4 8-4zM2 10l8 4 8-4M2 14l8 4 8-4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span>Student</span>
-              </span>
-            </div>
-
-            <div className="profile-card__body">
-              <div className="profile-card__section-head">
-                <span className="profile-card__section-title">Identity &amp; Credentials</span>
-                <span className="profile-card__section-sub">Verified by Registrar</span>
-              </div>
-
-              <div className="profile-row-list">
-                <div className="profile-row">
-                  <span className="profile-row__label">Student ID</span>
-                  <span className="profile-row__val">{user.studentId}</span>
-                </div>
-                <div className="profile-row">
-                  <span className="profile-row__label">Program</span>
-                  <span className="profile-row__val">{user.program}</span>
-                </div>
-                <div className="profile-row">
-                  <span className="profile-row__label">Academic Year</span>
-                  <span className="profile-row__val">Year {user.year}</span>
-                </div>
-                <div className="profile-row">
-                  <span className="profile-row__label">Campus Email</span>
-                  <span className="profile-row__val">{user.email}</span>
-                </div>
-                <div className="profile-row">
-                  <span className="profile-row__label">Status</span>
-                  <span className="profile-row__val status-text--success">Active Enrolled</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Quick Academic Services Card inspired by Mobile Reference */}
-          <section className="card card--elevated card--spaced quick-services-card">
-            <div className="quick-services-card__header">
-              <h3 className="quick-services-card__title">Academic Services</h3>
-              <span className="quick-services-card__badge">UPH Portal</span>
-            </div>
-            <ul className="quick-services-list">
-              <li>
-                <a
-                  href="https://moodle.uph.edu"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="quick-service-item"
-                  aria-label="Open LMS Moodle (opens in new tab)"
-                >
-                  <div className="quick-service-icon quick-service-icon--orange">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
-                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                    </svg>
-                  </div>
-                  <div className="quick-service-info">
-                    <span className="quick-service-name">LMS / Moodle</span>
-                    <span className="quick-service-desc">Lecture slides &amp; assignments</span>
-                  </div>
-                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
-                    <polyline points="7 5 12 10 7 15" />
-                  </svg>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://library.uph.edu"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="quick-service-item"
-                  aria-label="Visit University Library (opens in new tab)"
-                >
-                  <div className="quick-service-icon quick-service-icon--blue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <line x1="9" y1="3" x2="9" y2="21" />
-                      <line x1="3" y1="9" x2="9" y2="9" />
-                      <line x1="3" y1="15" x2="9" y2="15" />
-                    </svg>
-                  </div>
-                  <div className="quick-service-info">
-                    <span className="quick-service-name">Digital Library</span>
-                    <span className="quick-service-desc">Journals, e-books &amp; research</span>
-                  </div>
-                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
-                    <polyline points="7 5 12 10 7 15" />
-                  </svg>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#/form"
-                  className="quick-service-item"
-                  aria-label="Register Course for Term"
-                >
-                  <div className="quick-service-icon quick-service-icon--green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
-                      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                      <path d="M6 12v5c3 3 9 3 12 0v-5" />
-                    </svg>
-                  </div>
-                  <div className="quick-service-info">
-                    <span className="quick-service-name">Course Enrollment</span>
-                    <span className="quick-service-desc">Register subjects for active term</span>
-                  </div>
-                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
-                    <polyline points="7 5 12 10 7 15" />
-                  </svg>
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#/output"
-                  className="quick-service-item"
-                  aria-label="View My Submissions & Transcripts"
-                >
-                  <div className="quick-service-icon quick-service-icon--purple">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                  </div>
-                  <div className="quick-service-info">
-                    <span className="quick-service-name">My Submissions</span>
-                    <span className="quick-service-desc">Official enrollment receipts</span>
-                  </div>
-                  <svg className="quick-service-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
-                    <polyline points="7 5 12 10 7 15" />
-                  </svg>
-                </a>
-              </li>
-            </ul>
-          </section>
-        </aside>
-
-        {/* Right Column: Stats, GPA Card, Grades, Enrollments */}
+      {/* Profile and Academic Services moved to the Profile page (src/pages/Profile.jsx). */}
+      <div className="dashboard-grid dashboard-grid--single">
         <div className="dashboard-main">
           {/* 4 StatCards Grid */}
           <div className="stats-grid stats-grid--compact">
@@ -797,49 +637,6 @@ function Dashboard({
             />
           </div>
 
-          {/* GPA Banner matching Mobile */}
-          {gpa > 0 ? (
-            <section className="gpa-banner">
-              <div className="gpa-banner__top">
-                <div className="gpa-standing-badge">
-                  <svg viewBox="0 0 20 20" fill="none" stroke="#fcd34d" strokeWidth="2" width="14" height="14" aria-hidden="true">
-                    <circle cx="10" cy="8" r="5" />
-                    <path d="M7 13l-2 5 5-2 5 2-2-5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  <span>{standingText}</span>
-                </div>
-                <span className="gpa-term">Fall 2024</span>
-              </div>
-
-              <div className="gpa-banner__main">
-                <div className="gpa-banner__left">
-                  <h3 className="gpa-banner__title">Cumulative GPA</h3>
-                  <p className="gpa-banner__desc">Credit-weighted official calculation</p>
-                  <div className="gpa-banner__pills">
-                    <span className="gpa-mini-pill">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" width="12" height="12" aria-hidden="true">
-                        <path d="M2 13.5A1.5 1.5 0 0 1 3.5 12H14" />
-                        <path d="M3.5 2H14v12H3.5A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2z" />
-                      </svg>
-                      <span>{totalCredits} Credits</span>
-                    </span>
-                    <span className="gpa-mini-pill">
-                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" width="12" height="12" aria-hidden="true">
-                        <path d="M3 8l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      <span>{myGrades.length} Courses</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="gpa-banner__right">
-                  <span className="gpa-banner__score">{gpa.toFixed(2)}</span>
-                  <span className="gpa-banner__scale">out of 4.00</span>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
           {/* My Grades Table */}
           <section className="card card--elevated">
             <div className="section-head">
@@ -861,52 +658,6 @@ function Dashboard({
             />
           </section>
 
-          {/* My Enrollments Table with Filter Chips */}
-          <section className="card card--elevated card--spaced">
-            <div className="section-head">
-              <div>
-                <h2 className="section-head__title">My Enrollments</h2>
-                <p className="section-head__sub">Status of course requests submitted this term.</p>
-              </div>
-              <span className="section-head__count">
-                {filteredStudentEnrollments.length} records
-              </span>
-            </div>
-
-            {/* Filter Chips */}
-            <div className="filter-bar">
-              {ENROLLMENT_FILTERS.map((filter) => {
-                const active = enrollmentFilter === filter
-                const count =
-                  filter === 'All'
-                    ? myEnrollments.length
-                    : myEnrollments.filter(
-                        (e) => (e.status || '').toLowerCase() === filter.toLowerCase(),
-                      ).length
-
-                return (
-                  <button
-                    key={filter}
-                    type="button"
-                    className={`filter-chip ${active ? 'filter-chip--active' : ''}`}
-                    onClick={() => setEnrollmentFilter(filter)}
-                  >
-                    <span>{filter}</span>
-                    <span className="filter-chip__badge">{count}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            <DataTable
-              columns={myEnrollmentColumns}
-              rows={filteredStudentEnrollments}
-              onRowClick={(row) => setSelectedStudentRow(row)}
-              emptyTitle={`No ${enrollmentFilter.toLowerCase()} courses`}
-              emptyMessage="You have not enrolled in any course matching this filter."
-            />
-          </section>
-
           {/* Course Catalog Preview with Search */}
           <section className="card card--elevated card--spaced">
             <div className="section-head">
@@ -917,11 +668,11 @@ function Dashboard({
                   </svg>
                 </div>
                 <div>
-                  <h2 className="section-head__title">Course Catalog Offerings</h2>
-                  <p className="section-head__sub">Explore available subjects and check open seating.</p>
+                  <h2 className="section-head__title">Available to Enroll</h2>
+                  <p className="section-head__sub">Courses you have not requested yet. Approved and pending ones are on the Enroll in Course page.</p>
                 </div>
               </div>
-              <span className="section-head__count">{filteredCourses.length} offerings</span>
+              <a href="#/form" className="section-head__count">Open Enroll in Course →</a>
             </div>
 
             <div className="search-box">
@@ -949,7 +700,10 @@ function Dashboard({
             </div>
 
             <div className="courses-grid">
-              {filteredCourses.map((course) => {
+              {availableCourses.length === 0 ? (
+                <p className="catalog-empty">No open courses left to request.</p>
+              ) : null}
+              {availableCourses.map((course) => {
                 const percent = Math.min(
                   100,
                   Math.round((course.enrolled / course.capacity) * 100),
@@ -992,6 +746,8 @@ function Dashboard({
       <StudentDetailModal
         record={selectedStudentRow}
         onClose={() => setSelectedStudentRow(null)}
+        courses={courses}
+        grades={grades}
       />
     </div>
   )

@@ -12,7 +12,8 @@ import {
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import ListRow from '../../components/ListRow'
+import CourseCard from '../../components/CourseCard'
+import CourseFormSheet from '../../components/CourseFormSheet'
 import StatCard from '../../components/StatCard'
 import { EmptyView, ErrorView, LoadingView } from '../../components/StateView'
 import { useAuth } from '../../context/AuthContext'
@@ -26,6 +27,9 @@ export default function DashboardScreen() {
   const router = useRouter()
   const isStudent = user?.role !== 'administrator'
   const [searchQuery, setSearchQuery] = useState('')
+  // Admin course form: null = closed, {} = new course, a course object = edit it
+  const [courseForm, setCourseForm] = useState(null)
+  const [notice, setNotice] = useState(null)
 
   const {
     items: courses,
@@ -85,6 +89,42 @@ export default function DashboardScreen() {
     return map
   }, [enrollments])
 
+  // Student catalog: approved courses live in the Enrollments tab, so they are left out here.
+  // Order: open courses first, then pending requests, rejected requests, and full courses last.
+  const approvedCourseCount = useMemo(
+    () => (enrollments ?? []).filter((e) => e.status === 'approved').length,
+    [enrollments],
+  )
+  const catalogItems = useMemo(() => {
+    if (!isStudent) {
+      return [...filteredCourses].sort((a, b) => a.code.localeCompare(b.code))
+        .map((course) => ({ type: 'course', key: course.id, course }))
+    }
+    const rank = (course) => {
+      const status = enrollmentByCourse.get(course.id)
+      if (status === 'pending') return 1
+      if (status === 'rejected') return 2
+      if (course.enrolled >= course.capacity) return 3
+      return 0
+    }
+    const labels = ['Available to enroll', 'Waiting for approval', 'Rejected requests', 'Full classes']
+    const visible = filteredCourses
+      .filter((course) => enrollmentByCourse.get(course.id) !== 'approved')
+      .sort((a, b) => rank(a) - rank(b) || a.code.localeCompare(b.code))
+    const items = []
+    let lastRank = -1
+    for (const course of visible) {
+      const r = rank(course)
+      if (r !== lastRank) {
+        items.push({ type: 'header', key: `h${r}`, title: labels[r], count: visible.filter((c) => rank(c) === r).length })
+        lastRank = r
+      }
+      items.push({ type: 'course', key: course.id, course })
+    }
+    return items
+  }, [filteredCourses, enrollmentByCourse, isStudent])
+  const catalogCount = catalogItems.filter((item) => item.type === 'course').length
+
   if (!courses && coursesError) {
     return <ErrorView message={coursesError} onRetry={reloadCourses} />
   }
@@ -106,9 +146,10 @@ export default function DashboardScreen() {
     gpa != null ? (typeof gpa === 'number' ? gpa.toFixed(2) : gpa) : '—'
 
   return (
+    <>
     <FlatList
-      data={filteredCourses}
-      keyExtractor={(course) => String(course.id)}
+      data={catalogItems}
+      keyExtractor={(item) => String(item.key)}
       contentContainerStyle={styles.list}
       refreshControl={
         <RefreshControl
@@ -143,14 +184,6 @@ export default function DashboardScreen() {
                   </Text>
                 </View>
 
-                {/* Top Frosted Action Pill from UPH Reference */}
-                <View style={styles.heroQuickPill}>
-                  <Ionicons name="calendar-outline" size={14} color="#ffffff" />
-                  <View style={styles.heroQuickDivider} />
-                  <Ionicons name="notifications-outline" size={14} color="#ffffff" />
-                  <View style={styles.heroQuickDivider} />
-                  <Ionicons name="person-outline" size={14} color="#ffffff" />
-                </View>
               </View>
 
               <Text style={styles.heroTitle}>Welcome back,</Text>
@@ -275,8 +308,26 @@ export default function DashboardScreen() {
                 </View>
                 <Text style={styles.sectionTitle}>Course Catalog</Text>
               </View>
-              <Text style={styles.sectionCount}>{filteredCourses.length} courses</Text>
+              {isStudent ? (
+                <Text style={styles.sectionCount}>{catalogCount} {catalogCount === 1 ? 'course' : 'courses'}</Text>
+              ) : (
+                <Pressable
+                  onPress={() => { setNotice(null); setCourseForm({}) }}
+                  style={({ pressed }) => [styles.addCourseBtn, pressed && styles.enrollButtonPressed]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="add" size={18} color={colors.primaryText} />
+                  <Text style={styles.addCourseText}>Add Course</Text>
+                </Pressable>
+              )}
             </View>
+            {!isStudent ? <Text style={styles.adminHint}>Tap a course to edit or delete it.</Text> : null}
+            {notice ? (
+              <View style={styles.noticeBox} accessibilityRole="alert">
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            ) : null}
 
             {/* Quick Search Input */}
             <View style={[styles.searchBox, shadow.sm]}>
@@ -302,73 +353,79 @@ export default function DashboardScreen() {
       }
       ListEmptyComponent={
         <EmptyView
-          title="No courses matched"
-          message={`No courses found matching "${searchQuery}".`}
+          title={searchQuery ? 'No courses matched' : 'Nothing left to enroll'}
+          message={searchQuery
+            ? `No courses found matching "${searchQuery}".`
+            : 'Every course already has a request from you. Check the Enrollments tab.'}
         />
       }
-      renderItem={({ item }) => {
-        const existingStatus = enrollmentByCourse.get(item.id)
-        const isFull = item.enrolled >= item.capacity
-        return (
-          <View style={styles.courseItemWrap}>
-            <Pressable
-              onPress={() => router.push(`/course/${item.id}`)}
-              accessibilityRole="button"
-              accessibilityLabel={`View details for ${item.code} ${item.title}`}
-              style={({ pressed }) => [pressed && styles.enrollButtonPressed]}
-            >
-              <ListRow
-                badgeText={item.code}
-                title={item.title}
-                subtitle={`${item.instructor} · Term ${item.term}`}
-                meta={`${item.credits} Credits`}
-                progress={{ current: item.enrolled, max: item.capacity }}
-                right={<Ionicons name="chevron-forward" size={18} color={colors.muted} />}
-              />
-            </Pressable>
-            {/* Main flow: course list -> course detail -> enroll. */}
-            {isStudent ? (
-              <View style={styles.courseActionRow}>
-                {existingStatus ? (
-                  <View style={styles.courseStatusChip}>
-                    <Text style={styles.courseStatusText}>
-                      {existingStatus === 'approved'
-                        ? 'Enrolled'
-                        : existingStatus === 'pending'
-                          ? 'Requested'
-                          : 'Rejected'}
-                    </Text>
-                  </View>
-                ) : isFull ? (
-                  <View style={[styles.courseStatusChip, styles.courseStatusFull]}>
-                    <Text style={[styles.courseStatusText, styles.courseStatusFullText]}>
-                      Course full
-                    </Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => router.push(`/course/${item.id}`)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`View details and enroll in ${item.code}`}
-                    style={({ pressed }) => [
-                      styles.enrollButton,
-                      pressed && styles.enrollButtonPressed,
-                    ]}
-                  >
-                    <Ionicons name="add-circle" size={17} color={colors.primary} />
-                    <Text style={styles.enrollButtonText}>Details & Enroll</Text>
-                  </Pressable>
-                )}
-              </View>
-            ) : null}
-          </View>
+      ListFooterComponent={
+        isStudent && approvedCourseCount > 0 ? (
+          <Pressable
+            onPress={() => router.navigate('/enrollments')}
+            style={({ pressed }) => [styles.approvedNote, pressed && styles.enrollButtonPressed]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            <Text style={styles.approvedNoteText}>
+              {approvedCourseCount} approved {approvedCourseCount === 1 ? 'course is' : 'courses are'} in Enrollments
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+          </Pressable>
+        ) : null
+      }
+      renderItem={({ item }) =>
+        item.type === 'header' ? (
+          <Text style={styles.groupHeader}>
+            {item.title.toUpperCase()}  <Text style={styles.groupCount}>{item.count}</Text>
+          </Text>
+        ) : (
+          <CourseCard
+            course={item.course}
+            status={isStudent ? enrollmentByCourse.get(item.course.id) : undefined}
+            showAction={isStudent}
+            onPress={() => (isStudent ? router.push(`/course/${item.course.id}`) : (setNotice(null), setCourseForm(item.course)))}
+          />
         )
-      }}
+      }
     />
+    {!isStudent && courseForm ? (
+      <CourseFormSheet
+        key={courseForm.id ?? 'new'}
+        course={courseForm.id ? courseForm : null}
+        onClose={() => setCourseForm(null)}
+        onChanged={(message) => { setNotice(message); onRefresh() }}
+      />
+    ) : null}
+    </>
   )
 }
 
 const styles = StyleSheet.create({
+  addCourseBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, paddingHorizontal: spacing.md,
+    borderRadius: radii.pill, backgroundColor: colors.primary,
+  },
+  addCourseText: { color: colors.primaryText, fontWeight: '800', fontSize: font.small },
+  adminHint: { fontSize: font.small, color: colors.muted },
+  noticeBox: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radii.md,
+    borderWidth: 1, borderColor: colors.successBorder, backgroundColor: colors.successSoft,
+  },
+  noticeText: { flex: 1, fontSize: font.small, fontWeight: '600', color: colors.text },
+  groupHeader: {
+    marginTop: spacing.sm, paddingHorizontal: spacing.md,
+    fontSize: 12, fontWeight: '800', letterSpacing: 0.6, color: colors.muted,
+  },
+  groupCount: { color: colors.primary },
+  approvedNote: {
+    marginHorizontal: spacing.md, marginTop: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    padding: spacing.md, borderRadius: radii.md, borderWidth: 1, borderColor: colors.successBorder,
+    backgroundColor: colors.successSoft,
+  },
+  approvedNoteText: { flex: 1, fontSize: font.small, fontWeight: '700', color: colors.text },
+  courseRequestRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  courseRequestLabel: { fontSize: font.small, color: colors.muted, fontWeight: '600' },
   list: {
     paddingBottom: spacing.xl,
     gap: spacing.sm,

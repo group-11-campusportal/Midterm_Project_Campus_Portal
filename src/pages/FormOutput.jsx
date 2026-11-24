@@ -2,16 +2,18 @@ import { useState, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import StatusBadge from '../components/StatusBadge'
 import StudentDetailModal from '../components/StudentDetailModal'
+import EditGradeModal from '../components/EditGradeModal'
 
 // The "form output" page. It reads the shared state that lives in App,
 // so every record added on the form page shows up here — newest first.
-function FormOutput({ user, enrollments, grades }) {
+function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, onWithdrawEnrollment }) {
   const location = useLocation()
   const successMessage = location.state?.success
   const isAdministrator = user.role === 'administrator'
   const [searchQuery, setSearchQuery] = useState('')
   const [filterTerm, setFilterTerm] = useState('all')
   const [selectedRecord, setSelectedRecord] = useState(null)
+  const [editingGrade, setEditingGrade] = useState(null)
 
   const baseRows = useMemo(() => {
     return isAdministrator
@@ -276,12 +278,13 @@ function FormOutput({ user, enrollments, grades }) {
                   <th scope="col">Term</th>
                   <th scope="col">Score</th>
                   <th scope="col" style={{ textAlign: 'right' }}>Grade Evaluation</th>
+                  <th scope="col" style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-muted)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--color-text-muted)' }}>
                       No grade records found matching the search.
                     </td>
                   </tr>
@@ -322,6 +325,16 @@ function FormOutput({ user, enrollments, grades }) {
                           <span style={{ opacity: 0.7 }}>·</span>
                           <span>{Number(row.points).toFixed(1)} pts</span>
                         </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="btn btn--small btn--outline"
+                          onClick={() => setEditingGrade(row)}
+                          aria-label={`Edit grade for ${row.studentName} in ${row.courseCode}`}
+                        >
+                          Edit
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -409,8 +422,21 @@ function FormOutput({ user, enrollments, grades }) {
       {/* Detail Modal */}
       <StudentDetailModal
         record={selectedRecord}
+        key={selectedRecord?.id ?? 'none'}
         onClose={() => setSelectedRecord(null)}
+        grades={grades}
+        onWithdraw={isAdministrator ? undefined : onWithdrawEnrollment}
       />
+
+      {editingGrade ? (
+        <EditGradeModal
+          key={editingGrade.id}
+          grade={editingGrade}
+          onClose={() => setEditingGrade(null)}
+          onSave={onUpdateGrade}
+          onDelete={onDeleteGrade}
+        />
+      ) : null}
     </>
   )
 }

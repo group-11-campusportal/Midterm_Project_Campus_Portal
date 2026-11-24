@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import FormPage from './pages/FormPage'
 import FormOutput from './pages/FormOutput'
 import AiAdvisor from './pages/AiAdvisor'
+import Profile from './pages/Profile'
 import NotFound from './pages/NotFound'
 import { apiFetch, clearToken, getToken } from './lib/api'
 
@@ -127,6 +128,46 @@ function App() {
     return res.data
   }
 
+  // Admin: change or delete a grade (PUT / DELETE /api/grades/:id).
+  async function updateGrade(gradeId, score) {
+    const res = await apiFetch(`/api/grades/${gradeId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ score }),
+    })
+    setGrades((previous) => previous.map((item) => (item.id === gradeId ? res.data : item)))
+    return res.data
+  }
+
+  async function deleteGrade(gradeId) {
+    await apiFetch(`/api/grades/${gradeId}`, { method: 'DELETE' })
+    setGrades((previous) => previous.filter((item) => item.id !== gradeId))
+  }
+
+  // Admin: manage course offerings (POST / PUT / DELETE /api/courses).
+  const byCode = (a, b) => a.code.localeCompare(b.code) || a.term.localeCompare(b.term)
+  async function createCourse(input) {
+    const res = await apiFetch('/api/courses', { method: 'POST', body: JSON.stringify(input) })
+    setCourses((previous) => [...previous, res.data].sort(byCode))
+    return res.data
+  }
+
+  async function updateCourse(courseId, input) {
+    const res = await apiFetch(`/api/courses/${courseId}`, { method: 'PUT', body: JSON.stringify(input) })
+    setCourses((previous) => previous.map((item) => (item.id === courseId ? res.data : item)).sort(byCode))
+    return res.data
+  }
+
+  async function deleteCourse(courseId) {
+    await apiFetch(`/api/courses/${courseId}`, { method: 'DELETE' })
+    setCourses((previous) => previous.filter((item) => item.id !== courseId))
+  }
+
+  // Student: withdraw a pending request (DELETE /api/enrollments/:id; the server allows pending only).
+  async function withdrawEnrollment(enrollmentId) {
+    await apiFetch(`/api/enrollments/${enrollmentId}`, { method: 'DELETE' })
+    setEnrollments((previous) => previous.filter((item) => item.id !== enrollmentId))
+  }
+
   if (!authReady) {
     return (
       <div className="content">
@@ -170,6 +211,9 @@ function App() {
                 dataError={dataError}
                 onRetry={() => loadPortalData(currentUser)}
                 onUpdateEnrollmentStatus={updateEnrollmentStatus}
+                onCreateCourse={createCourse}
+                onUpdateCourse={updateCourse}
+                onDeleteCourse={deleteCourse}
               />
             }
           />
@@ -184,6 +228,7 @@ function App() {
                 students={students}
                 onAddEnrollment={addEnrollment}
                 onAddGrade={addGrade}
+                onWithdrawEnrollment={withdrawEnrollment}
               />
             }
           />
@@ -194,8 +239,15 @@ function App() {
                 user={currentUser}
                 enrollments={enrollments}
                 grades={grades}
+                onUpdateGrade={updateGrade}
+                onDeleteGrade={deleteGrade}
+                onWithdrawEnrollment={withdrawEnrollment}
               />
             }
+          />
+          <Route
+            path="/profile"
+            element={<Profile user={currentUser} enrollments={enrollments} grades={grades} />}
           />
           <Route
             path="/ai-advisor"

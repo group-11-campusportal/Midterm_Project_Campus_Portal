@@ -1,8 +1,13 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import DataTable from '../components/DataTable'
+import StatusBadge from '../components/StatusBadge'
+import StudentDetailModal from '../components/StudentDetailModal'
 import { toLetterGrade } from '../utils/grade'
 
 const TERMS = ['2024/2025']
+const ENROLLMENT_FILTERS = ['All', 'Approved', 'Pending', 'Rejected']
+const CATALOG_FILTERS = ['All', 'Open', 'Full', 'Requested']
 
 const emptyEnrollmentForm = { courseId: '', term: TERMS[0] }
 const emptyGradeForm = { studentId: '', courseId: '', score: '', term: TERMS[0] }
@@ -17,6 +22,7 @@ function FormPage({
   students,
   onAddEnrollment,
   onAddGrade,
+  onWithdrawEnrollment,
 }) {
   const navigate = useNavigate()
   const isAdministrator = user.role === 'administrator'
@@ -27,6 +33,9 @@ function FormPage({
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [enrollmentFilter, setEnrollmentFilter] = useState('All')
+  const [catalogFilter, setCatalogFilter] = useState('All')
+  const [selectedRecord, setSelectedRecord] = useState(null)
 
   function handleEnrollmentChange(event) {
     const { name, value } = event.target
@@ -229,6 +238,78 @@ function FormPage({
     )
   }, [courses, searchQuery])
 
+  // Administrator: approved enrollments without a grade, oldest first (the grading to-do list).
+  const gradedEnrollmentIds = new Set(grades.map((g) => g.enrollmentId))
+  const ungradedEnrollments = isAdministrator
+    ? enrollments
+      .filter((e) => e.status === 'approved' && !gradedEnrollmentIds.has(e.id))
+      .sort((a, b) => String(a.enrolledAt).localeCompare(String(b.enrolledAt)))
+    : []
+
+  // Student side: the API already returns only this student's enrollments.
+  const myEnrollments = useMemo(
+    () => (isAdministrator ? [] : enrollments.filter((e) => e.studentId === user.studentId)),
+    [enrollments, isAdministrator, user.studentId],
+  )
+  const myStatusByCourse = useMemo(() => {
+    const map = new Map()
+    for (const enrollment of myEnrollments) map.set(enrollment.courseId, enrollment.status)
+    return map
+  }, [myEnrollments])
+  const filteredMyEnrollments = useMemo(() => {
+    const rows = enrollmentFilter === 'All'
+      ? myEnrollments
+      : myEnrollments.filter((e) => (e.status || '').toLowerCase() === enrollmentFilter.toLowerCase())
+    return [...rows].sort((a, b) => String(b.enrolledAt).localeCompare(String(a.enrolledAt)))
+  }, [myEnrollments, enrollmentFilter])
+  const approvedCredits = myEnrollments
+    .filter((e) => e.status === 'approved')
+    .reduce((sum, e) => sum + (e.credits || 0), 0)
+
+  // Approved courses are listed in "My Enrollments", so the catalog leaves them out.
+  // Order: open courses first, then pending, rejected and full ones (same rule as the phone app).
+  function catalogState(course) {
+    const status = myStatusByCourse.get(course.id)
+    if (status) return status === 'approved' ? 'approved' : 'requested'
+    return course.enrolled >= course.capacity ? 'full' : 'open'
+  }
+  function catalogRank(course) {
+    const status = myStatusByCourse.get(course.id)
+    if (status === 'pending') return 1
+    if (status === 'rejected') return 2
+    if (course.enrolled >= course.capacity) return 3
+    return 0
+  }
+  const catalogBase = filteredCourses
+    .filter((c) => catalogState(c) !== 'approved')
+    .sort((a, b) => catalogRank(a) - catalogRank(b) || a.code.localeCompare(b.code))
+  const approvedInCatalog = filteredCourses.length - catalogBase.length
+  const catalogCounts = {
+    All: catalogBase.length,
+    Open: catalogBase.filter((c) => catalogState(c) === 'open').length,
+    Full: catalogBase.filter((c) => catalogState(c) === 'full').length,
+    Requested: catalogBase.filter((c) => catalogState(c) === 'requested').length,
+  }
+  const visibleCatalog = catalogFilter === 'All'
+    ? catalogBase
+    : catalogBase.filter((c) => catalogState(c) === catalogFilter.toLowerCase())
+
+  const myEnrollmentColumns = [
+    {
+      key: 'course',
+      label: 'Course',
+      render: (row) => (
+        <>
+          <span className="table__strong">{row.courseCode}</span>
+          <span className="table__muted">{row.courseTitle}</span>
+        </>
+      ),
+    },
+    { key: 'credits', label: 'SKS' },
+    { key: 'enrolledAt', label: 'Submitted' },
+    { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
+  ]
+
   return (
     <>
       {/* Modern Royal Navy Hero Header */}
@@ -278,6 +359,37 @@ function FormPage({
         <p className="alert alert--error" role="alert" style={{ marginTop: '16px' }}>
           {submitError}
         </p>
+      ) : null}
+
+      {isAdministrator && ungradedEnrollments.length > 0 ? (
+        <section className="ungraded-card" role="status">
+          <div className="ungraded-card__head">
+            <strong>
+              {ungradedEnrollments.length} approved {ungradedEnrollments.length === 1 ? 'enrollment has' : 'enrollments have'} no grade yet
+            </strong>
+            <span>Oldest first. Click Grade to fill the form.</span>
+          </div>
+          <ul className="ungraded-card__list">
+            {ungradedEnrollments.map((e) => (
+              <li key={e.id}>
+                <span className="ungraded-card__who">{e.studentName} · {e.studentId}</span>
+                <span className="ungraded-card__what">{e.courseCode} {e.courseTitle} · Term {e.term}</span>
+                <button
+                  type="button"
+                  className="btn btn--small btn--outline"
+                  onClick={() => {
+                    setGradeForm({ studentId: e.studentId, courseId: e.courseId, score: '', term: e.term })
+                    setErrors({})
+                    setSubmitError('')
+                    document.getElementById('score')?.focus()
+                  }}
+                >
+                  Grade
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {/* Modern 2-Column Responsive Enrollment Layout */}
@@ -428,12 +540,8 @@ function FormPage({
                   >
                     <option value="">Choose a course or click below…</option>
                     {courses.map((course) => {
-                      const isAlreadyEnrolled = enrollments.some(
-                        (e) =>
-                          e.studentId === user.studentId &&
-                          e.courseCode === course.code &&
-                          e.term === enrollmentForm.term,
-                      )
+                      const existing = myStatusByCourse.get(course.id)
+                      const isAlreadyEnrolled = Boolean(existing)
                       const isFull = course.enrolled >= course.capacity
                       return (
                         <option
@@ -443,7 +551,7 @@ function FormPage({
                         >
                           {course.code} — {course.title} ({course.credits} SKS)
                           {isAlreadyEnrolled
-                            ? ' — Already Enrolled'
+                            ? ` — ${existing === 'pending' ? 'Request pending' : existing === 'approved' ? 'Already enrolled' : 'Rejected'}`
                             : isFull
                             ? ' — Class Full'
                             : ''}
@@ -475,11 +583,7 @@ function FormPage({
                         <span>{selectedCourse.instructor}</span>
                       </span>
                       <span className="course-preview-meta-item">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        <span>Mon 08:00 - 10:30</span>
+                        <span>Term {selectedCourse.term}</span>
                       </span>
                     </div>
                     <div className="capacity-meter-wrap">
@@ -543,7 +647,49 @@ function FormPage({
           )}
         </section>
 
-        {/* Right Column: Interactive Course Catalog Card */}
+        {!isAdministrator ? (
+          <section className="card">
+            <div className="section-head">
+              <div>
+                <h2 className="section-head__title">My Enrollments</h2>
+                <p className="table__muted" style={{ fontSize: '13px', marginTop: '2px' }}>
+                  Every request you submitted and the registrar decision. Click a row for details.
+                </p>
+              </div>
+              <span className="section-head__count">{approvedCredits} SKS approved</span>
+            </div>
+
+            <div className="filter-bar">
+              {ENROLLMENT_FILTERS.map((filter) => {
+                const count = filter === 'All'
+                  ? myEnrollments.length
+                  : myEnrollments.filter((e) => (e.status || '').toLowerCase() === filter.toLowerCase()).length
+                return (
+                  <button
+                    key={filter}
+                    type="button"
+                    className={`filter-chip ${enrollmentFilter === filter ? 'filter-chip--active' : ''}`}
+                    onClick={() => setEnrollmentFilter(filter)}
+                  >
+                    <span>{filter}</span>
+                    <span className="filter-chip__badge">{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <DataTable
+              columns={myEnrollmentColumns}
+              rows={filteredMyEnrollments}
+              onRowClick={(row) => setSelectedRecord(row)}
+              emptyTitle={enrollmentFilter === 'All' ? 'No enrollment requests yet' : `No ${enrollmentFilter.toLowerCase()} requests`}
+              emptyMessage="Pick a course from the catalog below and submit the form."
+            />
+          </section>
+        ) : null}
+
+        {/* Right Column (administrator): Interactive Course Catalog Card */}
+        {isAdministrator ? (
         <section className="card">
           <div className="section-head">
             <div>
@@ -712,7 +858,143 @@ function FormPage({
             </table>
           </div>
         </section>
+        ) : null}
       </div>
+
+      {!isAdministrator ? (
+        <section className="card card--spaced">
+          <div className="section-head">
+            <div>
+              <h2 className="section-head__title">Course Catalog &amp; Capacity</h2>
+              <p className="table__muted" style={{ fontSize: '13px', marginTop: '2px' }}>
+                Courses you can still request, open ones first. Seats count approved enrollments only; a pending request does not hold a seat.
+              </p>
+            </div>
+            <span className="section-head__count">{visibleCatalog.length} {visibleCatalog.length === 1 ? 'offering' : 'offerings'}</span>
+          </div>
+
+          <div className="catalog-toolbar">
+            <div className="catalog-search-input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true" style={{ color: 'var(--color-text-muted)' }}>
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search by code, title, or instructor…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search courses"
+              />
+            </div>
+            <div className="filter-bar catalog-toolbar__filters">
+              {CATALOG_FILTERS.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={`filter-chip ${catalogFilter === filter ? 'filter-chip--active' : ''}`}
+                  onClick={() => setCatalogFilter(filter)}
+                >
+                  <span>{filter === 'Requested' ? 'My requests' : filter}</span>
+                  <span className="filter-chip__badge">{catalogCounts[filter]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {approvedInCatalog > 0 ? (
+            <p className="catalog-approved-note">
+              {approvedInCatalog} approved {approvedInCatalog === 1 ? 'course is' : 'courses are'} not shown here; see My Enrollments above.
+            </p>
+          ) : null}
+
+          {visibleCatalog.length === 0 ? (
+            <p className="catalog-empty">
+              {searchQuery ? `No courses match "${searchQuery}".` : 'Nothing to show here. Every course already has a request from you.'}
+            </p>
+          ) : (
+            <div className="catalog-grid">
+              {visibleCatalog.map((c) => {
+                const pct = Math.min(100, Math.round((c.enrolled / c.capacity) * 100))
+                const seatsLeft = Math.max(0, c.capacity - c.enrolled)
+                const state = catalogState(c)
+                const status = myStatusByCourse.get(c.id)
+                const isSelected = selectedCourseId === c.id
+                return (
+                  <article
+                    key={c.id}
+                    className={`catalog-card ${isSelected ? 'catalog-card--selected' : ''} ${state === 'full' ? 'catalog-card--full' : ''}`}
+                  >
+                    <div className="catalog-card__top">
+                      <span className="code-pill">{c.code}</span>
+                      <span className="catalog-card__credits">{c.credits} SKS</span>
+                    </div>
+                    <h3 className="catalog-card__title">{c.title}</h3>
+                    <dl className="catalog-card__facts">
+                      <div><dt>Instructor</dt><dd>{c.instructor}</dd></div>
+                      <div><dt>Term</dt><dd>{c.term}</dd></div>
+                    </dl>
+                    <div className="catalog-card__seats">
+                      <div className="capacity-track">
+                        <div
+                          className="capacity-bar-fill"
+                          style={{
+                            width: `${pct}%`,
+                            background: state === 'full' ? 'var(--color-danger)' : pct > 80 ? 'var(--color-warning)' : 'var(--color-primary)',
+                          }}
+                        />
+                      </div>
+                      <div className="catalog-card__seat-text">
+                        <span className={state === 'full' ? 'status-text--danger' : ''}>
+                          {state === 'full' ? 'Class full' : `${seatsLeft} ${seatsLeft === 1 ? 'seat' : 'seats'} left`}
+                        </span>
+                        <span>{c.enrolled} / {c.capacity} approved</span>
+                      </div>
+                    </div>
+                    <div className="catalog-card__action">
+                      {status ? (
+                        <>
+                          <span className="catalog-card__note">Your request</span>
+                          <StatusBadge status={status} />
+                        </>
+                      ) : state === 'full' ? (
+                        <>
+                          <span className="catalog-card__note">No seats available</span>
+                          <button type="button" className="btn-select-row" disabled>Full</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="catalog-card__note">{isSelected ? 'Filled into the form above' : 'Open for enrollment'}</span>
+                          <button
+                            type="button"
+                            className={`btn-select-row ${isSelected ? 'btn-select-row--active' : ''}`}
+                            onClick={() => {
+                              selectCourse(c.id)
+                              window.scrollTo({ top: 0, behavior: 'smooth' })
+                            }}
+                            aria-label={isSelected ? `${c.code} selected` : `Select ${c.code} for enrollment`}
+                          >
+                            {isSelected ? 'Selected' : 'Select'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      <StudentDetailModal
+        key={selectedRecord?.id ?? 'none'}
+        record={selectedRecord}
+        onClose={() => setSelectedRecord(null)}
+        courses={courses}
+        grades={grades}
+        onWithdraw={isAdministrator ? undefined : onWithdrawEnrollment}
+      />
     </>
   )
 }

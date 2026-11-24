@@ -12,17 +12,28 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import ListRow, { StatusBadge } from '../../components/ListRow'
+import EditGradeSheet from '../../components/EditGradeSheet'
+import RecordGradeModal from '../../components/RecordGradeModal'
 import { EmptyView, ErrorView, LoadingView } from '../../components/StateView'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
 import { useApiList } from '../../lib/useApiList'
-import { colors, font, gradients, radii, shadow, spacing } from '../../theme'
+import { colors, font, gradients, minTap, radii, shadow, spacing } from '../../theme'
 
+// Wording follows the web pages: "University Grade Records" (admin, src/pages/FormOutput.jsx)
+// and "My Academic Grades" (student, src/pages/Dashboard.jsx). Every number on this screen
+// comes from GET /api/grades, GET /api/enrollments or GET /api/auth/me.
 export default function GradesScreen() {
   const { user, gpa, refreshMe } = useAuth()
   const insets = useSafeAreaInsets()
   const isAdmin = user?.role === 'administrator'
-  const [activeTab, setActiveTab] = useState('grades') // 'grades' | 'courses'
+  const [activeTab, setActiveTab] = useState('grades') // student only: 'grades' | 'courses'
+  const [recordOpen, setRecordOpen] = useState(false)
+  const [recordKey, setRecordKey] = useState(0)
+  const [recordInitial, setRecordInitial] = useState(null)
+  const [editingGrade, setEditingGrade] = useState(null)
+  const [showAllUngraded, setShowAllUngraded] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   const { items: grades, error, refreshing, reload, refresh } = useApiList(api.grades)
   const {
@@ -50,641 +61,429 @@ export default function GradesScreen() {
     () => (enrollments || []).filter((e) => e.status === 'approved'),
     [enrollments],
   )
+  // Newest first, like the web ledger.
+  const sortedGrades = useMemo(() => [...(grades || [])].reverse(), [grades])
+
+  // Approved enrollments that still have no grade: the registrar's to-do list.
+  const ungraded = useMemo(() => {
+    const graded = new Set((grades || []).map((g) => g.enrollmentId))
+    return approvedCourses
+      .filter((e) => !graded.has(e.id))
+      .sort((a, b) => String(a.enrolledAt).localeCompare(String(b.enrolledAt)))
+  }, [grades, approvedCourses])
+
+  function openRecord(enrollment) {
+    setNotice(null)
+    setRecordInitial(enrollment)
+    setRecordKey((k) => k + 1)
+    setRecordOpen(true)
+  }
+
+  function handleRecorded(grade) {
+    setNotice(
+      `Grade ${grade.letter} (${Number(grade.points).toFixed(1)} pts) recorded for ${grade.studentName} in ${grade.courseCode}.`,
+    )
+    onRefresh()
+  }
 
   if (!grades && error) return <ErrorView message={error} onRetry={reload} />
-  if (!grades) return <LoadingView label="Loading academic records…" />
+  if (!grades) return <LoadingView label="Loading grade records…" />
 
-  const totalCredits = (grades || []).reduce((s, g) => s + (g.credits || 0), 0)
-  const gradedCount = grades?.length ?? 0
-  const activeCourseCount = approvedCourses.length
+  const gradedCount = grades.length
+  const totalCredits = grades.reduce((sum, g) => sum + (g.credits || 0), 0)
+  const averageScore = gradedCount
+    ? (grades.reduce((sum, g) => sum + (Number(g.score) || 0), 0) / gradedCount).toFixed(1)
+    : '—'
+  const highGrades = grades.filter((g) => (Number(g.points) || 0) >= 3.5).length
   const gpaDisplay = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
-  const listData = !isAdmin && activeTab === 'courses' ? approvedCourses : grades
+  const terms = [...new Set(grades.map((g) => g.term))].sort().join(', ')
+  const showCourses = !isAdmin && activeTab === 'courses'
+
+  const stats = isAdmin
+    ? [
+        { label: 'Total grades', value: String(gradedCount) },
+        { label: 'Average score', value: averageScore === '—' ? '—' : `${averageScore}` },
+        { label: 'Grades ≥ 3.5 pts', value: String(highGrades) },
+      ]
+    : [
+        { label: 'GPA (4.0 scale)', value: gpaDisplay },
+        { label: 'Graded courses', value: String(gradedCount) },
+        { label: 'Graded credits', value: `${totalCredits} SKS` },
+      ]
 
   return (
-    <FlatList
-      data={listData}
-      keyExtractor={(item) => String(item.id)}
-      contentContainerStyle={[
-        styles.list,
-        { paddingTop: Math.max(insets.top, 16) },
-      ]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing || enrollmentsRefreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.primary}
-        />
-      }
-      ListHeaderComponent={
-        <View style={styles.headerWrap}>
-          {/* Top Royal Navy Fluid Header */}
-          <LinearGradient
-            colors={isAdmin ? gradients.heroAdmin : gradients.hero}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.heroHeader, shadow.glow]}
-          >
-            <View style={styles.waveOverlay} />
+    <View style={styles.screen}>
+      <FlatList
+        data={showCourses ? approvedCourses : sortedGrades}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing || enrollmentsRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        ListHeaderComponent={
+          <View style={styles.headerWrap}>
+            <LinearGradient
+              colors={isAdmin ? gradients.heroAdmin : gradients.hero}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.hero, { paddingTop: insets.top + spacing.md }]}
+            >
+              <View style={styles.eyebrow}>
+                <Ionicons name={isAdmin ? 'library-outline' : 'school-outline'} size={13} color="#ffffff" />
+                <Text style={styles.eyebrowText}>{isAdmin ? 'Academic Registry' : 'My Academic Records'}</Text>
+              </View>
+              <Text style={styles.heroTitle}>
+                {isAdmin ? 'University Grade Records' : 'My Academic Grades'}
+              </Text>
+              <Text style={styles.heroDescription}>
+                {isAdmin
+                  ? 'Every grade recorded across all programs, newest first. Tap a grade to edit it.'
+                  : 'Recorded letter grades and course credit points.'}
+              </Text>
 
-            <View style={styles.heroTopRow}>
-              <View>
-                <Text style={styles.heroTitle}>
-                  {isAdmin ? 'University Academic Records' : 'Academic Performance'}
-                </Text>
-                <Text style={styles.heroSemester}>
-                  Fall Semester · Academic Term 2024/2025
-                </Text>
+              <View style={styles.statsRow}>
+                {stats.map((stat) => (
+                  <View key={stat.label} style={styles.statTile}>
+                    <Text style={styles.statValue}>{stat.value}</Text>
+                    <Text style={styles.statLabel}>{stat.label}</Text>
+                  </View>
+                ))}
               </View>
 
-              {/* Clean Quick Pill */}
-              <View style={styles.headerQuickPill}>
-                <Ionicons name="school-outline" size={13} color="#ffffff" />
-                <Text style={styles.headerQuickPillText}>Registrar Verified</Text>
+              {isAdmin ? (
+                <Pressable
+                  onPress={() => openRecord(null)}
+                  style={({ pressed }) => [styles.recordButton, pressed && styles.recordButtonPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Record a grade"
+                >
+                  <Ionicons name="add-circle" size={20} color={colors.primaryDeep} />
+                  <Text style={styles.recordButtonText}>Record Grade</Text>
+                </Pressable>
+              ) : null}
+            </LinearGradient>
+
+            {isAdmin && ungraded.length > 0 ? (
+              <View style={styles.ungradedCard}>
+                <View style={styles.ungradedHead}>
+                  <Ionicons name="warning" size={18} color={colors.warning} />
+                  <Text style={styles.ungradedTitle}>
+                    {ungraded.length} approved {ungraded.length === 1 ? 'enrollment has' : 'enrollments have'} no grade yet
+                  </Text>
+                </View>
+                {(showAllUngraded ? ungraded : ungraded.slice(0, 3)).map((e) => (
+                  <View key={e.id} style={styles.ungradedRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.ungradedStudent}>{e.studentName} · {e.studentId}</Text>
+                      <Text style={styles.ungradedCourse}>{e.courseCode} {e.courseTitle} · Term {e.term}</Text>
+                    </View>
+                    <Pressable
+                      onPress={() => openRecord(e)}
+                      style={({ pressed }) => [styles.ungradedBtn, pressed && { opacity: 0.85 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Record grade for ${e.studentName} in ${e.courseCode}`}
+                    >
+                      <Text style={styles.ungradedBtnText}>Grade</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                {ungraded.length > 3 ? (
+                  <Pressable onPress={() => setShowAllUngraded((v) => !v)} hitSlop={8}>
+                    <Text style={styles.ungradedMore}>{showAllUngraded ? 'Show less' : `Show all ${ungraded.length}`}</Text>
+                  </Pressable>
+                ) : null}
               </View>
-            </View>
+            ) : null}
 
-            {/* Prominent Degree Progress Banner */}
-            <View style={styles.prominentCard}>
-              <View style={styles.prominentLeft}>
-                <Text style={styles.prominentTitle}>Degree Audit & Graded Units</Text>
-                <Text style={styles.prominentSub}>
-                  {gradedCount} Graded Course{gradedCount === 1 ? '' : 's'} · {totalCredits} SKS Credits
-                </Text>
+            {notice ? (
+              <View style={styles.notice} accessibilityRole="alert">
+                <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                <Text style={styles.noticeText}>{notice}</Text>
+                <Pressable onPress={() => setNotice(null)} hitSlop={10} accessibilityLabel="Dismiss">
+                  <Ionicons name="close" size={18} color={colors.muted} />
+                </Pressable>
               </View>
-              <View style={styles.prominentArrow}>
-                <Ionicons name="school-outline" size={16} color="#ffffff" />
+            ) : null}
+
+            {!isAdmin ? (
+              <View style={styles.toggleRow}>
+                <ToggleTab
+                  active={activeTab === 'grades'}
+                  onPress={() => setActiveTab('grades')}
+                  title="My Grades"
+                  caption={`${gradedCount} recorded`}
+                />
+                <ToggleTab
+                  active={activeTab === 'courses'}
+                  onPress={() => setActiveTab('courses')}
+                  title="Approved Courses"
+                  caption={`${approvedCourses.length} approved`}
+                />
               </View>
-            </View>
-          </LinearGradient>
+            ) : null}
 
-          {/* 2-Segmented Modern Navigation Toggle */}
-          {!isAdmin ? (
-            <View style={styles.toggleRow}>
-              <Pressable
-                style={[
-                  styles.toggleTab,
-                  activeTab === 'grades' && styles.toggleTabActive,
-                ]}
-                onPress={() => setActiveTab('grades')}
-              >
-                <Text
-                  style={[
-                    styles.toggleTabText,
-                    activeTab === 'grades' && styles.toggleTabTextActive,
-                  ]}
-                >
-                  My Grades
-                </Text>
-                <Text
-                  style={[
-                    styles.toggleTabCount,
-                    activeTab === 'grades' && styles.toggleTabCountActive,
-                  ]}
-                >
-                  GPA {gpaDisplay}
-                </Text>
-              </Pressable>
+            {!isAdmin && activeTab === 'grades' && gradedCount > 0 && gpa != null ? (
+              <GpaCard gpa={gpa} totalCredits={totalCredits} count={gradedCount} terms={terms} />
+            ) : null}
 
-              <Pressable
-                style={[
-                  styles.toggleTab,
-                  activeTab === 'courses' && styles.toggleTabActive,
-                ]}
-                onPress={() => setActiveTab('courses')}
-              >
-                <Text
-                  style={[
-                    styles.toggleTabText,
-                    activeTab === 'courses' && styles.toggleTabTextActive,
-                  ]}
-                >
-                  Approved Courses
-                </Text>
-                <Text
-                  style={[
-                    styles.toggleTabCount,
-                    activeTab === 'courses' && styles.toggleTabCountActive,
-                  ]}
-                >
-                  {activeCourseCount} Active
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          {/* If Grade Transcript is selected: Render GPA Hero Card */}
-          {activeTab === 'grades' && !isAdmin && gpa != null && gradedCount > 0 ? (
-            <GpaCard gpa={gpa} totalCredits={totalCredits} count={gradedCount} />
-          ) : null}
-        </View>
-      }
-      ListEmptyComponent={
-        <EmptyView
-          title={activeTab === 'courses' && !isAdmin ? 'No approved courses yet' : 'No grades recorded yet'}
-          message={
-            activeTab === 'courses' && !isAdmin
-              ? 'Courses approved by the registrar will appear here.'
-              : 'Official grades recorded for your approved enrollments will appear here.'
-          }
-        />
-      }
-      renderItem={({ item }) => {
-        if (activeTab === 'courses' && !isAdmin) {
-          return (
+            <Text style={styles.sectionTitle}>
+              {showCourses ? 'Approved courses' : isAdmin ? 'Grade Registry Ledger' : 'Course grades'}
+              <Text style={styles.sectionCount}>
+                {'  '}{showCourses ? approvedCourses.length : gradedCount} records
+              </Text>
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          <EmptyView
+            title={showCourses ? 'No approved courses yet' : 'No grades recorded yet'}
+            message={
+              showCourses
+                ? 'Courses approved by the registrar will appear here.'
+                : isAdmin
+                  ? 'Tap Record Grade to enter a score for an approved enrollment.'
+                  : 'Grades recorded for your approved enrollments will appear here.'
+            }
+          />
+        }
+        renderItem={({ item }) =>
+          showCourses ? (
             <View style={styles.rowWrap}>
               <ListRow
                 badgeText={item.courseCode}
                 title={item.courseTitle}
-                subtitle={`Term ${item.term}`}
-                meta={`${item.credits} SKS Credits · Enrolled ${item.enrolledAt ?? ''}`}
+                subtitle={`Term ${item.term} · ${item.credits} SKS`}
+                meta={`Requested on ${item.enrolledAt ?? '—'}`}
                 right={<StatusBadge status={item.status} />}
               />
             </View>
+          ) : (
+            <GradeRow grade={item} showStudent={isAdmin} onPress={isAdmin ? () => { setNotice(null); setEditingGrade(item) } : undefined} />
           )
         }
+      />
 
-        // Render Grade Row with Letter Badge
-        return (
-          <View style={styles.rowWrap}>
-            <ListRow
-              badgeText={item.courseCode}
-              title={item.courseTitle}
-              subtitle={isAdmin ? `${item.studentName} (${item.studentId})` : `Term ${item.term}`}
-              meta={`${item.credits} Credits · Raw Score: ${item.score}`}
-              right={
-                <View style={styles.gradeBadge}>
-                  <Text style={styles.letter}>{item.letter ?? '-'}</Text>
-                  {item.points != null ? (
-                    <Text style={styles.points}>{Number(item.points).toFixed(1)} pts</Text>
-                  ) : null}
-                </View>
-              }
-            />
-          </View>
-        )
-      }}
-      ListFooterComponent={
-        !isAdmin ? (
-          <View style={styles.footerLinksWrap}>
-            <Pressable style={[styles.footerLinkCard, shadow.sm]}>
-              <View style={styles.footerLinkLeft}>
-                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-                <Text style={styles.footerLinkText}>Academic Calendar & Deadlines</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-            </Pressable>
+      {isAdmin ? (
+        <RecordGradeModal
+          key={recordKey}
+          initial={recordInitial}
+          visible={recordOpen}
+          onClose={() => setRecordOpen(false)}
+          enrollments={enrollments}
+          grades={grades}
+          onRecorded={handleRecorded}
+        />
+      ) : null}
 
-            <Pressable style={[styles.footerLinkCard, shadow.sm]}>
-              <View style={styles.footerLinkLeft}>
-                <Ionicons name="people-outline" size={18} color={colors.primary} />
-                <Text style={styles.footerLinkText}>Faculty Advising & Office Hours</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-            </Pressable>
-          </View>
-        ) : null
-      }
-    />
+      {isAdmin && editingGrade ? (
+        <EditGradeSheet
+          key={editingGrade.id}
+          grade={editingGrade}
+          onClose={() => setEditingGrade(null)}
+          onChanged={(message) => { setNotice(message); onRefresh() }}
+        />
+      ) : null}
+    </View>
   )
 }
 
-function GpaCard({ gpa, totalCredits, count }) {
-  const numGpa = typeof gpa === 'number' ? gpa : parseFloat(gpa) || 0
-  const value = typeof gpa === 'number' ? gpa.toFixed(2) : String(gpa)
+function ToggleTab({ active, onPress, title, caption }) {
+  return (
+    <Pressable
+      style={[styles.toggleTab, active && styles.toggleTabActive]}
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+    >
+      <Text style={[styles.toggleTabText, active && styles.toggleTabTextActive]}>{title}</Text>
+      <Text style={[styles.toggleTabCaption, active && styles.toggleTabCaptionActive]}>{caption}</Text>
+    </Pressable>
+  )
+}
 
+function GradeRow({ grade, showStudent, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [styles.gradeCard, shadow.sm, pressed && { opacity: 0.85 }]}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `Edit grade ${grade.letter} for ${grade.studentName} in ${grade.courseCode}` : undefined}
+    >
+      <View style={styles.gradeMain}>
+        <View style={styles.codeRow}>
+          <View style={styles.codeBadge}>
+            <Text style={styles.codeText}>{grade.courseCode}</Text>
+          </View>
+          <Text style={styles.termText}>Term {grade.term}</Text>
+        </View>
+        <Text style={styles.courseTitle} numberOfLines={2}>{grade.courseTitle}</Text>
+        {showStudent ? (
+          <View style={styles.studentRow}>
+            <Ionicons name="person-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.studentText} numberOfLines={1}>
+              {grade.studentName} · {grade.studentId}
+            </Text>
+          </View>
+        ) : null}
+        <Text style={styles.gradeMeta}>
+          Score <Text style={styles.gradeMetaStrong}>{grade.score}</Text> / 100 · {grade.credits} SKS
+        </Text>
+      </View>
+      <View style={styles.letterBox}>
+        <Text style={styles.letter}>{grade.letter ?? '—'}</Text>
+        {grade.points != null ? (
+          <Text style={styles.points}>{Number(grade.points).toFixed(1)} pts</Text>
+        ) : null}
+        {onPress ? <Text style={styles.editHint}>Edit</Text> : null}
+      </View>
+    </Pressable>
+  )
+}
+
+function GpaCard({ gpa, totalCredits, count, terms }) {
+  const numeric = Number(gpa) || 0
   const standing =
-    numGpa >= 3.5
-      ? "Dean's List · First Class Standing"
-      : numGpa >= 3.0
-        ? 'Good Academic Standing'
+    numeric >= 3.5 ? "Dean's List · First Class Standing"
+      : numeric >= 3.0 ? 'Good Academic Standing'
         : 'Satisfactory Standing'
 
   return (
-    <LinearGradient
-      colors={gradients.hero}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.gpaHero, shadow.glow]}
-    >
-      <View style={styles.waveOverlay} />
-
-      <View style={styles.gpaTop}>
+    <View style={[styles.gpaCard, shadow.sm]}>
+      <View style={styles.gpaLeft}>
+        <Text style={styles.gpaLabel}>Cumulative GPA</Text>
+        <Text style={styles.gpaHint}>Credit-weighted, {count} course{count === 1 ? '' : 's'} · {totalCredits} SKS</Text>
         <View style={styles.standingBadge}>
-          <Ionicons name="ribbon-outline" size={12} color="#fcd34d" />
+          <Ionicons name="ribbon-outline" size={13} color={colors.primaryDark} />
           <Text style={styles.standingText}>{standing}</Text>
         </View>
-        <Text style={styles.termLabel}>Fall Term 2024/2025</Text>
+        {terms ? <Text style={styles.gpaTerms}>Term {terms}</Text> : null}
       </View>
-
-      <View style={styles.gpaMainRow}>
-        <View style={styles.gpaLeft}>
-          <Text style={styles.gpaHeroLabel}>Cumulative GPA</Text>
-          <Text style={styles.gpaHeroSub}>Credit-weighted calculation</Text>
-          <View style={styles.gpaPills}>
-            <View style={styles.miniPill}>
-              <Ionicons name="book-outline" size={12} color="#93c5fd" />
-              <Text style={styles.miniPillText}>{totalCredits} Credits</Text>
-            </View>
-            <View style={styles.miniPill}>
-              <Ionicons name="checkmark-done-outline" size={12} color="#93c5fd" />
-              <Text style={styles.miniPillText}>{count} Courses</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.gpaRight}>
-          <Text style={styles.gpaValue}>{value}</Text>
-          <Text style={styles.gpaScale}>out of 4.00</Text>
-        </View>
+      <View style={styles.gpaRight}>
+        <Text style={styles.gpaValue}>{numeric.toFixed(2)}</Text>
+        <Text style={styles.gpaScale}>out of 4.00</Text>
       </View>
-    </LinearGradient>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  list: {
-    paddingBottom: spacing.xl,
-    gap: spacing.sm,
-    flexGrow: 1,
-    backgroundColor: colors.background,
+  editHint: { marginTop: 2, fontSize: 11, fontWeight: '800', color: colors.primary },
+  ungradedCard: {
+    marginHorizontal: spacing.md, padding: spacing.md, gap: spacing.sm, borderRadius: radii.md,
+    borderWidth: 1, borderColor: colors.warningBorder, backgroundColor: colors.warningSoft,
   },
-  rowWrap: {
-    paddingHorizontal: spacing.md,
+  ungradedHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  ungradedTitle: { flex: 1, fontSize: font.body, fontWeight: '800', color: colors.text },
+  ungradedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm,
+    borderTopWidth: 1, borderTopColor: colors.warningBorder,
   },
-  headerWrap: {
-    gap: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  heroHeader: {
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+  ungradedStudent: { fontSize: font.small + 1, fontWeight: '700', color: colors.text },
+  ungradedCourse: { fontSize: font.small, color: colors.textSecondary },
+  ungradedBtn: { minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: colors.warning, justifyContent: 'center' },
+  ungradedBtnText: { color: '#ffffff', fontWeight: '800', fontSize: font.small },
+  ungradedMore: { fontSize: font.small, fontWeight: '700', color: colors.warning, textAlign: 'center' },
+  screen: { flex: 1, backgroundColor: colors.background },
+  list: { paddingBottom: spacing.xl, gap: spacing.sm, flexGrow: 1 },
+  rowWrap: { paddingHorizontal: spacing.md },
+  headerWrap: { gap: spacing.md, marginBottom: spacing.xs },
+
+  hero: {
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     paddingHorizontal: spacing.lg,
-    paddingTop: 16,
     paddingBottom: spacing.lg,
-    overflow: 'hidden',
-    position: 'relative',
-    gap: spacing.md,
-  },
-  waveOverlay: {
-    position: 'absolute',
-    left: -60,
-    right: -60,
-    bottom: -90,
-    height: 180,
-    borderRadius: 120,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    backgroundColor: 'transparent',
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  heroTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  heroSemester: {
-    fontSize: font.xs,
-    color: '#e0e7ff',
-    marginTop: 2,
-  },
-  headerQuickPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-  },
-  headerQuickPillText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  prominentCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderRadius: radii.lg,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  prominentLeft: {
-    gap: 3,
-  },
-  prominentTitle: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  prominentSub: {
-    color: '#bfdbfe',
-    fontSize: font.xs,
-    fontWeight: '600',
-  },
-  prominentArrow: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  examCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginHorizontal: spacing.md,
     gap: spacing.sm,
+    ...shadow.glow,
   },
-  examTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  eyebrow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill,
   },
-  examTextWrap: {
-    gap: 2,
-    flex: 1,
+  eyebrowText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  heroTitle: { fontSize: font.heading + 2, fontWeight: '800', color: '#ffffff' },
+  heroDescription: { fontSize: font.small + 1, color: '#dbeafe', lineHeight: 20 },
+  statsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  statTile: {
+    flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.12)', borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)', borderRadius: radii.md,
+    paddingVertical: 10, paddingHorizontal: spacing.sm, gap: 2,
   },
-  examTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
+  statValue: { color: '#ffffff', fontSize: font.title + 2, fontWeight: '800' },
+  statLabel: { color: '#cbd5e1', fontSize: 12, fontWeight: '600' },
+  recordButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    minHeight: minTap, borderRadius: radii.md, backgroundColor: '#ffffff', marginTop: spacing.xs,
   },
-  examSub: {
-    fontSize: font.xs,
-    color: colors.muted,
+  recordButtonPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
+  recordButtonText: { color: colors.primaryDeep, fontSize: font.body, fontWeight: '800' },
+
+  notice: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.md,
+    backgroundColor: colors.successSoft, borderWidth: 1, borderColor: colors.successBorder,
+    borderRadius: radii.md, padding: spacing.md,
   },
-  examDivider: {
-    height: 1,
-    backgroundColor: colors.borderLight,
-  },
-  ksmButton: {
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.primaryMuted,
-    borderRadius: radii.md,
-    minHeight: 44,
-    paddingVertical: 10,
-    paddingHorizontal: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  ksmButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.primaryDark,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
+  noticeText: { flex: 1, fontSize: font.small, color: colors.text, fontWeight: '600', lineHeight: 18 },
+
+  toggleRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },
   toggleTab: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingVertical: 10,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    gap: 2,
+    flex: 1, minHeight: minTap, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radii.md, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', gap: 2,
   },
-  toggleTabActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  toggleTabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  toggleTabText: { fontSize: font.small + 1, fontWeight: '700', color: colors.text },
+  toggleTabTextActive: { color: '#ffffff' },
+  toggleTabCaption: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  toggleTabCaptionActive: { color: '#dbeafe' },
+
+  sectionTitle: {
+    fontSize: font.body + 1, fontWeight: '800', color: colors.text, paddingHorizontal: spacing.md, marginTop: spacing.xs,
   },
-  toggleTabText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  toggleTabTextActive: {
-    color: '#ffffff',
-  },
-  toggleTabCount: {
-    fontSize: font.xs,
-    fontWeight: '600',
-    color: colors.muted,
-  },
-  toggleTabCountActive: {
-    color: '#bfdbfe',
-  },
-  courseCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+  sectionCount: { fontSize: font.small, fontWeight: '600', color: colors.muted },
+
+  gradeCard: {
+    marginHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border,
     padding: spacing.md,
-    marginHorizontal: spacing.md,
-    gap: spacing.sm,
   },
-  courseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  gradeMain: { flex: 1, gap: 4 },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  codeBadge: { backgroundColor: colors.primarySoft, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
+  codeText: { fontSize: 12, fontWeight: '800', color: colors.primaryDark },
+  termText: { fontSize: 12, fontWeight: '600', color: colors.muted },
+  courseTitle: { fontSize: font.body + 1, fontWeight: '700', color: colors.text },
+  studentRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  studentText: { flex: 1, fontSize: font.small + 1, color: colors.textSecondary, fontWeight: '600' },
+  gradeMeta: { fontSize: font.small, color: colors.textSecondary },
+  gradeMetaStrong: { fontWeight: '800', color: colors.text },
+  letterBox: {
+    minWidth: 64, alignItems: 'center', backgroundColor: colors.primarySoft, borderWidth: 1,
+    borderColor: colors.primaryMuted, borderRadius: radii.md, paddingVertical: 8, paddingHorizontal: 10,
   },
-  courseTitleWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  courseTitleText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  courseInstructorText: {
-    fontSize: font.xs,
-    color: colors.muted,
-    fontWeight: '600',
-  },
-  courseCreditsBadge: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: radii.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: colors.primaryMuted,
-  },
-  courseCreditsText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  courseMetricsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-  },
-  metricItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  metricDivider: {
-    width: 1,
-    height: 22,
-    backgroundColor: colors.borderLight,
-  },
-  metricLabel: {
-    fontSize: 10,
-    color: colors.muted,
-    fontWeight: '600',
-  },
-  metricValue: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  metricValueGood: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: colors.success,
-  },
-  metricValueSchedule: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  gpaHero: {
-    borderRadius: radii.xl,
+  letter: { fontSize: font.heading, fontWeight: '800', color: colors.primary },
+  points: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+
+  gpaCard: {
+    marginHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.primaryMuted,
     padding: spacing.md,
-    marginHorizontal: spacing.md,
-    overflow: 'hidden',
-    position: 'relative',
-    gap: spacing.sm,
   },
-  gpaTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
+  gpaLeft: { flex: 1, gap: 4 },
+  gpaLabel: { fontSize: font.body + 1, fontWeight: '800', color: colors.text },
+  gpaHint: { fontSize: font.small, color: colors.textSecondary },
   standingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.pill,
+    flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radii.pill,
   },
-  standingText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  termLabel: {
-    color: '#bfdbfe',
-    fontSize: font.xs,
-    fontWeight: '600',
-  },
-  gpaMainRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  gpaLeft: {
-    gap: 2,
-  },
-  gpaHeroLabel: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  gpaHeroSub: {
-    color: '#e0e7ff',
-    fontSize: font.xs,
-  },
-  gpaPills: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
-  },
-  miniPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.14)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.pill,
-  },
-  miniPillText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  gpaRight: {
-    alignItems: 'flex-end',
-  },
-  gpaValue: {
-    fontSize: 34,
-    fontWeight: '900',
-    color: '#ffffff',
-    lineHeight: 38,
-  },
-  gpaScale: {
-    color: '#bfdbfe',
-    fontSize: font.xs,
-  },
-  gradeBadge: {
-    alignItems: 'flex-end',
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.primaryMuted,
-  },
-  letter: {
-    fontSize: font.title,
-    fontWeight: '800',
-    color: colors.primary,
-  },
-  points: {
-    fontSize: font.xs,
-    color: colors.muted,
-  },
-  footerLinksWrap: {
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  footerLinkCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 48,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  footerLinkLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  footerLinkText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-  },
+  standingText: { fontSize: 12, fontWeight: '700', color: colors.primaryDark },
+  gpaTerms: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  gpaRight: { alignItems: 'flex-end' },
+  gpaValue: { fontSize: 34, fontWeight: '900', color: colors.primaryDeep, lineHeight: 38 },
+  gpaScale: { fontSize: 12, color: colors.muted, fontWeight: '600' },
 })

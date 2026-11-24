@@ -21,11 +21,21 @@ import { colors, font, gradients, radii, shadow, spacing } from '../../theme'
 
 const FILTERS = ['All', 'Approved', 'Pending', 'Rejected']
 
+// "today", "1 day ago", "12 days ago" from an ISO date (YYYY-MM-DD). Dates in the future read as today.
+function age(dateText) {
+  const then = Date.parse(`${dateText}T00:00:00`)
+  if (Number.isNaN(then)) return ''
+  const days = Math.max(0, Math.floor((Date.now() - then) / 86400000))
+  return days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`
+}
+
 export default function EnrollmentsScreen() {
   const { user } = useAuth()
   const insets = useSafeAreaInsets()
   const isAdmin = user?.role === 'administrator'
   const { items, error, refreshing, reload, refresh } = useApiList(api.enrollments)
+  // Seat counts for the administrator's decision (approved / capacity per course).
+  const { items: courses, refresh: refreshCourses } = useApiList(api.courses)
   const [activeFilter, setActiveFilter] = useState('All')
   const [updatingId, setUpdatingId] = useState(null)
 
@@ -44,23 +54,76 @@ export default function EnrollmentsScreen() {
 
   const filteredItems = useMemo(() => {
     if (!items) return []
-    if (activeFilter === 'All') return items
-    return items.filter(
-      (e) => (e.status || '').toLowerCase() === activeFilter.toLowerCase(),
+    const rows = activeFilter === 'All'
+      ? items
+      : items.filter((e) => (e.status || '').toLowerCase() === activeFilter.toLowerCase())
+    // Students see their newest request first, like "My Enrollments" on the web enroll page.
+    // Admin: pending requests first (the ones that need a decision), then newest first.
+    // Student: newest first, like "My Enrollments" on the web enroll page.
+    const byDate = (a, b) => String(b.enrolledAt).localeCompare(String(a.enrolledAt))
+    return [...rows].sort(isAdmin
+      ? (a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || byDate(a, b)
+      : byDate)
+  }, [items, activeFilter, isAdmin])
+  const approvedCredits = (items || [])
+    .filter((e) => e.status === 'approved')
+    .reduce((sum, e) => sum + (e.credits || 0), 0)
+
+  // Approve/reject cannot be undone from the app, so the registrar confirms first.
+  function confirmStatusChange(item, nextStatus) {
+    const verb = nextStatus === 'approved' ? 'Approve' : 'Reject'
+    Alert.alert(
+      `${verb} request?`,
+      `${item.studentName} · ${item.courseCode} ${item.courseTitle}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: verb, style: nextStatus === 'rejected' ? 'destructive' : 'default', onPress: () => handleStatusChange(item.id, nextStatus) },
+      ],
     )
-  }, [items, activeFilter])
+  }
+
+  // Student: withdraw an own pending request (DELETE /api/enrollments/:id).
+  function confirmWithdraw(item) {
+    Alert.alert(
+      'Withdraw request?',
+      `${item.courseCode} ${item.courseTitle}. You can request it again later.`,
+      [
+        { text: 'Keep request', style: 'cancel' },
+        {
+          text: 'Withdraw',
+          style: 'destructive',
+          onPress: async () => {
+            setUpdatingId(item.id)
+            try {
+              await api.deleteEnrollment(item.id)
+              await Promise.allSettled([refresh(), refreshCourses()])
+            } catch (err) {
+              if (err.status !== 401) Alert.alert('Could not withdraw', err.message || 'Try again.')
+            } finally {
+              setUpdatingId(null)
+            }
+          },
+        },
+      ],
+    )
+  }
 
   async function handleStatusChange(id, nextStatus) {
     setUpdatingId(id)
     try {
       await api.updateEnrollmentStatus(id, nextStatus)
-      await refresh()
+      await Promise.allSettled([refresh(), refreshCourses()])
     } catch (err) {
       Alert.alert('Action Failed', err.message || 'Could not update status.')
     } finally {
       setUpdatingId(null)
     }
   }
+
+  const pendingItems = (items || []).filter((e) => e.status === 'pending')
+  const pendingCount = pendingItems.length
+  const oldestPending = pendingItems.map((e) => e.enrolledAt).sort()[0] ?? ''
+  const courseById = new Map((courses || []).map((c) => [c.id, c]))
 
   if (!items && error) return <ErrorView message={error} onRetry={reload} />
   if (!items) return <LoadingView label="Loading enrollments…" />
@@ -105,11 +168,27 @@ export default function EnrollmentsScreen() {
             <Text style={styles.heroSubtitle}>
               {isAdmin
                 ? 'Review student enrollment requests and course quotas.'
-                : 'Track course submissions and registrar approvals.'}
+                : `Every request you submitted and the registrar decision · ${approvedCredits} SKS approved`}
             </Text>
           </LinearGradient>
 
           {/* Filter Chips Bar */}
+          {isAdmin && pendingCount > 0 ? (
+            <Pressable
+              onPress={() => setActiveFilter('Pending')}
+              style={styles.decisionBanner}
+              accessibilityRole="button"
+            >
+              <Ionicons name="alert-circle" size={20} color={colors.warning} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.decisionTitle}>
+                  {pendingCount} {pendingCount === 1 ? 'request needs' : 'requests need'} your decision
+                </Text>
+                <Text style={styles.decisionSub}>Oldest waiting since {oldestPending}. Tap to show only pending.</Text>
+              </View>
+            </Pressable>
+          ) : null}
+
           <View style={styles.filterBar}>
             {FILTERS.map((f) => {
               const active = activeFilter === f
@@ -168,57 +247,134 @@ export default function EnrollmentsScreen() {
           }
         />
       }
-      renderItem={({ item }) => (
+      renderItem={({ item }) => isAdmin ? (
+        <AdminRequestCard
+          item={item}
+          course={courseById.get(item.courseId)}
+          busy={updatingId === item.id}
+          onApprove={() => confirmStatusChange(item, 'approved')}
+          onReject={() => confirmStatusChange(item, 'rejected')}
+        />
+      ) : (
         <View style={styles.cardWrap}>
           <ListRow
             badgeText={item.courseCode}
             title={item.courseTitle}
             subtitle={isAdmin ? `${item.studentName} (${item.studentId})` : `Term ${item.term}`}
-            meta={`${item.credits} Credits · Requested on ${item.enrolledAt ?? 'Term Start'}`}
+            meta={`${item.credits} SKS · Submitted ${item.enrolledAt ?? '—'}${isAdmin ? ` · Term ${item.term}` : ''}`}
             right={<StatusBadge status={item.status} />}
           />
-
-          {/* Admin Approve/Reject Action Buttons matching Web */}
-          {isAdmin && item.status === 'pending' ? (
+          {item.status === 'pending' ? (
             <View style={styles.actionRow}>
+              <Text style={styles.waitingText}>Waiting for the registrar</Text>
               <Pressable
-                onPress={() => handleStatusChange(item.id, 'approved')}
+                onPress={() => confirmWithdraw(item)}
                 disabled={updatingId === item.id}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  styles.approveBtn,
-                  pressed && styles.btnPressed,
-                ]}
+                style={({ pressed }) => [styles.actionBtn, styles.rejectBtn, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`Withdraw request for ${item.courseCode}`}
               >
-                <Ionicons name="checkmark-circle" size={15} color={colors.success} />
-                <Text style={styles.approveText}>Approve</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => handleStatusChange(item.id, 'rejected')}
-                disabled={updatingId === item.id}
-                style={({ pressed }) => [
-                  styles.actionBtn,
-                  styles.rejectBtn,
-                  pressed && styles.btnPressed,
-                ]}
-              >
-                <Ionicons name="close-circle" size={15} color={colors.danger} />
-                <Text style={styles.rejectText}>Reject</Text>
+                <Ionicons name="arrow-undo" size={15} color={colors.danger} />
+                <Text style={styles.rejectText}>{updatingId === item.id ? 'Withdrawing…' : 'Withdraw'}</Text>
               </Pressable>
             </View>
           ) : null}
+
         </View>
       )}
     />
   )
 }
 
+// One request as the registrar sees it: who, which course, when, and whether a seat is free.
+function AdminRequestCard({ item, course, busy, onApprove, onReject }) {
+  const isPending = item.status === 'pending'
+  const seatsLeft = course ? Math.max(0, course.capacity - course.enrolled) : null
+  return (
+    <View style={[styles.reqCard, isPending && styles.reqCardPending, shadow.sm]}>
+      <View style={styles.reqTop}>
+        <Text style={[styles.reqKind, isPending && styles.reqKindPending]}>
+          {isPending ? 'NEW REQUEST' : item.status === 'approved' ? 'APPROVED' : 'REJECTED'}
+        </Text>
+        <StatusBadge status={item.status} />
+      </View>
+      <Text style={styles.reqStudent}>{item.studentName}</Text>
+      <Text style={styles.reqStudentId}>Student ID {item.studentId}</Text>
+      <Text style={styles.reqSentence}>
+        {isPending ? 'wants to enroll in ' : item.status === 'approved' ? 'is enrolled in ' : 'was refused for '}
+        <Text style={styles.reqCourse}>{item.courseCode} · {item.courseTitle}</Text>
+      </Text>
+      <View style={styles.reqFacts}>
+        <Text style={styles.reqFact}>
+          <Ionicons name="time-outline" size={12} color={colors.muted} /> Submitted {item.enrolledAt} ({age(item.enrolledAt)})
+        </Text>
+        <Text style={styles.reqFact}>
+          <Ionicons name="book-outline" size={12} color={colors.muted} /> {item.credits} SKS · Term {item.term}
+        </Text>
+        {course ? (
+          <Text style={[styles.reqFact, seatsLeft === 0 && styles.reqFull]}>
+            <Ionicons name="people-outline" size={12} color={seatsLeft === 0 ? colors.danger : colors.muted} />{' '}
+            {seatsLeft === 0 ? 'Class is full — approving will fail' : `${seatsLeft} seats left (${course.enrolled}/${course.capacity} approved)`}
+          </Text>
+        ) : null}
+      </View>
+      {isPending ? (
+        <View style={styles.reqActions}>
+          <Pressable
+            onPress={onReject}
+            disabled={busy}
+            style={({ pressed }) => [styles.actionBtn, styles.rejectBtn, styles.reqBtn, pressed && styles.btnPressed]}
+          >
+            <Ionicons name="close-circle" size={16} color={colors.danger} />
+            <Text style={styles.rejectText}>Reject</Text>
+          </Pressable>
+          <Pressable
+            onPress={onApprove}
+            disabled={busy || seatsLeft === 0}
+            style={({ pressed }) => [styles.actionBtn, styles.approveBtn, styles.reqBtn, (busy || seatsLeft === 0) && { opacity: 0.5 }, pressed && styles.btnPressed]}
+          >
+            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+            <Text style={styles.approveText}>Approve</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  waitingText: { flex: 1, fontSize: font.small, color: colors.muted },
+  decisionBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md,
+    borderRadius: radii.md, borderWidth: 1, borderColor: colors.warningBorder, backgroundColor: colors.warningSoft,
+  },
+  decisionTitle: { fontSize: font.body, fontWeight: '800', color: colors.text },
+  decisionSub: { fontSize: font.small, color: colors.textSecondary },
+  reqCard: {
+    backgroundColor: colors.surface, borderRadius: radii.lg, borderWidth: 1, borderColor: colors.border,
+    padding: spacing.md, gap: 4,
+  },
+  reqCardPending: { borderColor: colors.warningBorder, borderLeftWidth: 4, borderLeftColor: colors.warning },
+  reqTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  reqKind: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, color: colors.muted },
+  reqKindPending: { color: colors.warning },
+  reqStudent: { fontSize: font.title, fontWeight: '800', color: colors.text },
+  reqStudentId: { fontSize: font.small, color: colors.muted },
+  reqSentence: { fontSize: font.body, color: colors.textSecondary, marginTop: 2 },
+  reqCourse: { fontWeight: '700', color: colors.primaryDark },
+  reqFacts: { marginTop: 6, gap: 3 },
+  reqFact: { fontSize: font.small, color: colors.textSecondary },
+  reqFull: { color: colors.danger, fontWeight: '700' },
+  reqActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  reqBtn: { flex: 1, justifyContent: 'center' },
   list: { padding: spacing.md, gap: spacing.sm, flexGrow: 1, backgroundColor: colors.background },
   header: { marginBottom: spacing.xs, gap: 12 },
   heroBanner: {
-    borderRadius: radii.xl,
+    // Full width under the status bar, like the Grades and Dashboard headers.
+    marginHorizontal: -spacing.md,
+    marginTop: -spacing.md,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     padding: spacing.lg,
     position: 'relative',
     overflow: 'hidden',
@@ -277,15 +433,16 @@ const styles = StyleSheet.create({
   heroSubtitle: { fontSize: font.small, color: '#bfdbfe', marginTop: 2 },
   filterBar: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 6,
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    gap: 5,
+    paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
@@ -325,6 +482,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: 4,
     marginBottom: 4,

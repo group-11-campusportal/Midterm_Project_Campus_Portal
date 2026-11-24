@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useState } from 'react'
 import {
+  Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,15 +12,26 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import PrimaryButton from '../../components/PrimaryButton'
+import ProfileQr, { profileQrText } from '../../components/ProfileQr'
 import { useAuth } from '../../context/AuthContext'
-import { API_URL } from '../../lib/config'
 import { colors, font, gradients, radii, shadow, spacing } from '../../theme'
+
+// Same links as the web Profile page. Feedback opens the phone's mail app (Gmail / Outlook).
+const FEEDBACK_URL = 'mailto:01881250031@student.uph.edu?subject=Campus%20Portal%20Feedback'
+
+// Same colours as the web icons (.quick-service-icon--* in src/index.css).
+const SERVICE_TONES = {
+  orange: { bg: '#fff7ed', fg: '#ea580c' },
+  blue: { bg: '#eff6ff', fg: '#2563eb' },
+  green: { bg: '#ecfdf5', fg: '#059669' },
+  purple: { bg: '#f5f3ff', fg: '#7c3aed' },
+}
 
 export default function ProfileScreen() {
   const { user, gpa, signOut } = useAuth()
   const insets = useSafeAreaInsets()
   const [busy, setBusy] = useState(false)
-  const [showSecurityDetails, setShowSecurityDetails] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
 
   async function handleSignOut() {
     setBusy(true)
@@ -37,6 +50,16 @@ export default function ProfileScreen() {
   const displayYear = user?.year ? `Year ${user.year}` : (user?.title || '—')
 
   const gpaValue = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
+  const numericGpa = Number(gpa) || 0
+  const standing = numericGpa <= 0 ? 'No grades recorded yet'
+    : numericGpa >= 3.5 ? "Dean's List · First Class Standing"
+      : numericGpa >= 3.0 ? 'Good Academic Standing' : 'Satisfactory Standing'
+  const identityRows = isStudent
+    ? [['Student ID', user?.studentId], ['Program', user?.program],
+        ['Academic Year', user?.year ? `Year ${user.year}` : null], ['Campus Email', user?.email],
+        ['Username', user?.username]]
+    : [['Staff ID', user?.staffId], ['Title', user?.title], ['Department', user?.department],
+        ['Email', user?.email], ['Username', user?.username]]
 
   const initials = displayName
     .split(' ')
@@ -47,10 +70,7 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { paddingTop: Math.max(insets.top, 16) },
-      ]}
+      contentContainerStyle={styles.container}
       showsVerticalScrollIndicator={false}
     >
       {/* Sleek Modern Header with Fluid Wave Contour */}
@@ -59,7 +79,7 @@ export default function ProfileScreen() {
           colors={isStudent ? gradients.hero : gradients.heroAdmin}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.heroBackground}
+          style={[styles.heroBackground, { paddingTop: insets.top + 16 }]}
         >
           <View style={styles.waveOverlay} />
 
@@ -70,10 +90,6 @@ export default function ProfileScreen() {
                 <Ionicons name="school-outline" size={14} color="#ffffff" />
                 <Text style={styles.portalBadgeText}>Campus Portal</Text>
               </View>
-            </View>
-            <View style={styles.statusPill}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>Active Session</Text>
             </View>
           </View>
         </LinearGradient>
@@ -98,9 +114,15 @@ export default function ProfileScreen() {
 
             {/* Top Bar with QR and Settings icons */}
             <View style={styles.idCardTopIcons}>
-              <View style={styles.idCardIconButton}>
+              <Pressable
+                style={styles.idCardIconButton}
+                onPress={() => setQrOpen(true)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Show my profile QR code"
+              >
                 <Ionicons name="qr-code-outline" size={20} color="#93c5fd" />
-              </View>
+              </Pressable>
               <View style={styles.idCardIconButton}>
                 <Ionicons name="shield-checkmark-outline" size={20} color="#93c5fd" />
               </View>
@@ -115,7 +137,7 @@ export default function ProfileScreen() {
                 <Text style={styles.idNumber}>{displayId}</Text>
                 <View style={styles.idPillDot} />
                 <Text style={styles.idRole}>
-                  {isStudent ? 'Undergraduate' : 'Staff Administrator'}
+                  {isStudent ? 'Student' : 'Administrator'}
                 </Text>
               </View>
             </View>
@@ -143,117 +165,90 @@ export default function ProfileScreen() {
 
       {/* Main Content Tiles */}
       <View style={styles.contentWrap}>
-        {/* Modern 2-Tile Grid for Academic Standing & Progress */}
+        {/* Same facts as the web profile card (src/pages/Dashboard.jsx): Identity & Credentials. */}
         {isStudent ? (
-          <View style={styles.tilesRow}>
-            <View style={[styles.tileCard, shadow.sm]}>
-              <View style={styles.tileIconWrapBlue}>
-                <Ionicons name="trophy-outline" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.tileTextWrap}>
-                <Text style={styles.tileLabel}>Cumulative GPA</Text>
-                <Text style={styles.tileValue}>{gpaValue}</Text>
-                <Text style={styles.tileSub}>Dean's List Honors</Text>
-              </View>
+          <View style={[styles.tileCard, shadow.sm]}>
+            <View style={styles.tileIconWrapBlue}>
+              <Ionicons name="trophy-outline" size={20} color={colors.primary} />
             </View>
-
-            <View style={[styles.tileCard, shadow.sm]}>
-              <View style={styles.tileIconWrapGreen}>
-                <Ionicons name="checkmark-done-circle-outline" size={20} color={colors.success} />
-              </View>
-              <View style={styles.tileTextWrap}>
-                <Text style={styles.tileLabel}>Degree Progress</Text>
-                <Text style={styles.tileValue}>84 / 144</Text>
-                <Text style={styles.tileSub}>SKS Credits Completed</Text>
-              </View>
+            <View style={styles.tileTextWrap}>
+              <Text style={styles.tileLabel}>Cumulative GPA</Text>
+              <Text style={styles.tileValue}>{gpaValue}</Text>
+              <Text style={styles.tileSub}>{standing}</Text>
             </View>
           </View>
         ) : null}
 
-        {/* Academic Services & Account Menu */}
-        <View style={[styles.card, shadow.sm, { paddingVertical: spacing.xs }]}>
-          <Pressable style={styles.menuItem}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Ionicons name="document-text-outline" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={styles.menuItemTitle}>Academic Transcripts & Records</Text>
-                <Text style={styles.menuItemSub}>Official certified grades and reports</Text>
-              </View>
+        <View style={[styles.card, shadow.sm]}>
+          <Text style={styles.identityTitle}>Identity & Credentials</Text>
+          <Text style={styles.identitySub}>From your university account</Text>
+          {identityRows.map(([label, value], index) => (
+            <View key={label} style={[styles.identityRow, index > 0 && styles.identityRowBorder]}>
+              <Text style={styles.identityLabel}>{label}</Text>
+              <Text style={styles.identityValue} numberOfLines={2}>{value || '—'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-          </Pressable>
-
-          <View style={styles.menuDivider} />
-
-          <Pressable style={styles.menuItem}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={styles.menuItemTitle}>Study Plan & Course Registrations</Text>
-                <Text style={styles.menuItemSub}>Active term schedule and courses</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-          </Pressable>
-
-          <View style={styles.menuDivider} />
-
-          <Pressable style={styles.menuItem}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Ionicons name="card-outline" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={styles.menuItemTitle}>Tuition & Student Account</Text>
-                <Text style={styles.menuItemSub}>Account balance: Cleared ($0.00)</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-          </Pressable>
-
-          <View style={styles.menuDivider} />
-
-          <Pressable
-            style={styles.menuItem}
-            onPress={() => setShowSecurityDetails(!showSecurityDetails)}
-          >
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Ionicons name="lock-closed-outline" size={18} color={colors.primary} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={styles.menuItemTitle}>Security & Keystore Architecture</Text>
-                <Text style={styles.menuItemSub}>Hardware keystore · AES-256 encrypted</Text>
-              </View>
-            </View>
-            <Ionicons
-              name={showSecurityDetails ? 'chevron-down' : 'chevron-forward'}
-              size={16}
-              color={colors.muted}
-            />
-          </Pressable>
-
-          {showSecurityDetails ? (
-            <View style={styles.securityBox}>
-              <View style={styles.securityRow}>
-                <Ionicons name="server-outline" size={14} color={colors.muted} />
-                <Text style={styles.securityText}>API: {API_URL || 'Not configured (.env)'}</Text>
-              </View>
-              <View style={styles.securityRow}>
-                <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
-                <Text style={styles.securityText}>Keystore: expo-secure-store (Hardware-backed)</Text>
-              </View>
-              <View style={styles.securityRow}>
-                <Ionicons name="cube-outline" size={14} color={colors.primary} />
-                <Text style={styles.securityText}>Runtime: React Native & Expo SDK 58</Text>
-              </View>
-            </View>
-          ) : null}
+          ))}
         </View>
+
+        {/* Academic Services: same shortcuts as the web Profile page (src/pages/Profile.jsx). */}
+        <View style={[styles.card, shadow.sm]}>
+          <Text style={styles.identityTitle}>Academic Services</Text>
+          <Text style={styles.identitySub}>Campus apps, feedback and collaboration tools</Text>
+          <Text style={styles.serviceGroup}>CAMPUS LINKS & TOOLS</Text>
+          {[
+            ['book-outline', 'LMS / Moodle', 'Lecture slides & assignments', 'https://learn.uph.edu/', 'orange'],
+            ['library-outline', 'Digital Library', 'Journals, e-books & research', 'https://library.uph.edu', 'blue'],
+            ['chatbox-outline', 'Feedback', 'Email us to help improve the Campus Portal', FEEDBACK_URL, 'green'],
+            ['people-outline', 'Collaboration Tools', 'Collaborate in Microsoft Teams', 'https://teams.microsoft.com', 'purple'],
+          ].map(([icon, title, sub, url, tone]) => (
+            <Pressable
+              key={title}
+              onPress={() => Linking.openURL(url)}
+              style={({ pressed }) => [styles.serviceRow, pressed && styles.servicePressed]}
+              accessibilityRole="link"
+            >
+              <View style={[styles.serviceIcon, { backgroundColor: SERVICE_TONES[tone].bg }]}>
+                <Ionicons name={icon} size={18} color={SERVICE_TONES[tone].fg} />
+              </View>
+              <View style={styles.serviceText}>
+                <Text style={styles.serviceTitle}>{title}</Text>
+                <Text style={styles.serviceSub}>{sub}</Text>
+              </View>
+              <View style={styles.externalBadge}><Text style={styles.externalText}>{url.startsWith('mailto:') ? 'Email' : 'External'}</Text></View>
+              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Profile QR: same content as the web Profile page. */}
+        <Pressable
+          onPress={() => setQrOpen(true)}
+          style={({ pressed }) => [styles.card, shadow.sm, styles.qrRow, pressed && styles.servicePressed]}
+          accessibilityRole="button"
+        >
+          <View style={[styles.serviceIcon, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name="qr-code-outline" size={18} color={colors.primary} />
+          </View>
+          <View style={styles.serviceText}>
+            <Text style={styles.serviceTitle}>My Profile QR</Text>
+            <Text style={styles.serviceSub}>Show it to the registrar to identify yourself</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+        </Pressable>
+
+        <Modal visible={qrOpen} transparent animationType="fade" onRequestClose={() => setQrOpen(false)}>
+          <Pressable style={styles.qrBackdrop} onPress={() => setQrOpen(false)}>
+            <Pressable style={styles.qrCard} onPress={() => {}}>
+              <Text style={styles.qrTitle}>{displayName}</Text>
+              <Text style={styles.qrSub}>{displayId} · {isStudent ? 'Student' : 'Administrator'}</Text>
+              <View style={styles.qrBox}>
+                <ProfileQr value={profileQrText(user)} size={220} />
+              </View>
+              <Text style={styles.qrNote}>Contains your name and ID only. No password or session token.</Text>
+              <PrimaryButton title="Close" variant="outline" onPress={() => setQrOpen(false)} />
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Sign Out Action Button */}
         <View style={styles.signOutWrap}>
@@ -271,6 +266,28 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  qrRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  qrBackdrop: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  qrCard: { width: '100%', maxWidth: 360, backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing.lg, gap: spacing.sm, alignItems: 'stretch' },
+  qrTitle: { fontSize: font.title, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  qrSub: { fontSize: font.small, color: colors.muted, textAlign: 'center' },
+  qrBox: { alignSelf: 'center', padding: spacing.sm, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border, marginVertical: spacing.sm },
+  qrNote: { fontSize: 12, color: colors.muted, textAlign: 'center', marginBottom: spacing.xs },
+  serviceGroup: { marginTop: spacing.md, marginBottom: spacing.xs, fontSize: 11, fontWeight: '800', letterSpacing: 0.6, color: colors.muted },
+  serviceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 56, paddingVertical: spacing.sm },
+  servicePressed: { opacity: 0.7 },
+  serviceIcon: { width: 36, height: 36, borderRadius: radii.md, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  serviceText: { flex: 1, gap: 2 },
+  externalBadge: { backgroundColor: colors.borderLight, borderRadius: radii.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  externalText: { fontSize: 11, fontWeight: '700', color: colors.muted },
+  serviceTitle: { fontSize: font.body, fontWeight: '700', color: colors.text },
+  serviceSub: { fontSize: font.small, color: colors.muted },
+  identityTitle: { fontSize: font.body, fontWeight: '800', color: colors.text },
+  identitySub: { fontSize: font.small, color: colors.muted, marginBottom: spacing.xs },
+  identityRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 10 },
+  identityRowBorder: { borderTopWidth: 1, borderTopColor: colors.borderLight },
+  identityLabel: { fontSize: font.small, color: colors.muted },
+  identityValue: { flex: 1, textAlign: 'right', fontSize: font.small, fontWeight: '700', color: colors.text },
   container: {
     backgroundColor: colors.background,
     flexGrow: 1,

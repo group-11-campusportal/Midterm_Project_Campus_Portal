@@ -7,7 +7,7 @@ export default function PrimaryButton({
   onPress,
   busy = false,
   disabled = false,
-  variant = 'primary', // 'primary' | 'gradient' | 'outline' | 'ghost'
+  variant = 'primary', // 'primary' | 'gradient' | 'outline' | 'ghost' | 'danger'
   icon,
 }) {
   const inactive = busy || disabled
@@ -69,7 +69,7 @@ export default function PrimaryButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
-        isOutline ? styles.outline : isGhost ? styles.ghost : styles.solid,
+        isOutline ? styles.outline : isGhost ? styles.ghost : variant === 'danger' ? styles.danger : styles.solid,
         inactive && styles.inactive,
         pressed && !inactive && styles.pressed,
         !isOutline && !isGhost && shadow.glow,
@@ -96,6 +96,12 @@ const styles = StyleSheet.create({
   },
   solid: {
     backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  danger: {
+    backgroundColor: colors.danger,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',

@@ -89,6 +89,19 @@ export const api = {
   createEnrollment: (courseId) =>
     apiFetch('/api/enrollments', { method: 'POST', body: { courseId } }).then((r) => r.data),
   grades: () => apiFetch('/api/grades').then((r) => r.data),
+  // Administrator only (403 for a student).
+  students: () => apiFetch('/api/students').then((r) => r.data),
+  createGrade: (enrollmentId, score) =>
+    apiFetch('/api/grades', { method: 'POST', body: { enrollmentId, score } }).then((r) => r.data),
+  updateGrade: (id, score) =>
+    apiFetch(`/api/grades/${encodeURIComponent(id)}`, { method: 'PUT', body: { score } }).then((r) => r.data),
+  deleteGrade: (id) => apiFetch(`/api/grades/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  createCourse: (input) => apiFetch('/api/courses', { method: 'POST', body: input }).then((r) => r.data),
+  updateCourse: (id, input) =>
+    apiFetch(`/api/courses/${encodeURIComponent(id)}`, { method: 'PUT', body: input }).then((r) => r.data),
+  deleteCourse: (id) => apiFetch(`/api/courses/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // Student: withdraw an own pending request. Administrator: delete a pending or rejected one.
+  deleteEnrollment: (id) => apiFetch(`/api/enrollments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   updateEnrollmentStatus: (id, status) =>
     apiFetch(`/api/enrollments/${encodeURIComponent(id)}/status`, {
       method: 'PATCH',
