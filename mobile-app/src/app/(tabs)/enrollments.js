@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Alert,
@@ -32,6 +32,7 @@ function age(dateText) {
 export default function EnrollmentsScreen() {
   const { user } = useAuth()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const isAdmin = user?.role === 'administrator'
   const { items, error, refreshing, reload, refresh } = useApiList(api.enrollments)
   // Seat counts for the administrator's decision (approved / capacity per course).
@@ -247,6 +248,18 @@ export default function EnrollmentsScreen() {
           }
         />
       }
+      ListFooterComponent={isAdmin ? null : (
+        <View style={styles.fabRow}>
+          <Pressable
+            onPress={() => router.navigate({ pathname: '/', params: { focus: 'catalog' } })}
+            style={({ pressed }) => [styles.fab, shadow.glow, pressed && styles.fabPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Enroll in a new course from the course catalog"
+          >
+            <Ionicons name="add" size={30} color="#ffffff" />
+          </Pressable>
+        </View>
+      )}
       renderItem={({ item }) => isAdmin ? (
         <AdminRequestCard
           item={item}
@@ -509,4 +522,14 @@ const styles = StyleSheet.create({
   approveText: { fontSize: font.xs, fontWeight: '700', color: colors.success },
   rejectText: { fontSize: font.xs, fontWeight: '700', color: colors.danger },
   btnPressed: { opacity: 0.75 },
+  fabRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingTop: spacing.xs, paddingRight: spacing.xs },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  fabPressed: { opacity: 0.85, transform: [{ scale: 0.95 }] },
 })
