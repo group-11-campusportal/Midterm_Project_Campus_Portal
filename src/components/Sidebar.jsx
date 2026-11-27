@@ -25,6 +25,12 @@ function buildNavItems(role) {
       label: 'AI Advisor',
       icon: 'ai',
     })
+  } else {
+    items.push({
+      to: '/course-recommendation',
+      label: 'Course Recommendation',
+      icon: 'ai',
+    })
   }
 
   items.push({ to: '/profile', label: 'Profile', icon: 'profile' })

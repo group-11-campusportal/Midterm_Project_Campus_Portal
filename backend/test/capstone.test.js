@@ -10,7 +10,7 @@ import { seedDatabase } from '../src/seed.js'
 import { createApp } from '../src/app.js'
 import { issueToken } from '../src/auth.js'
 import { loadConfig } from '../src/config.js'
-import { createGeminiAdvisor } from '../src/ai.js'
+import { createGeminiAdvisor, createGeminiRecommender } from '../src/ai.js'
 
 const secret = 'test-only-secret-0123456789abcdef0123456789abcdef'
 const users = { admin: 'u1', andi: 'u2', bella: 'u3' }
@@ -32,7 +32,7 @@ afterEach(() => db.close())
 after(() => rmSync(directory, { recursive: true, force: true }))
 
 const quiet = () => {}
-const build = (advisor) => createApp({ db, secret, logger: quiet, advisor })
+const build = (advisor, recommender) => createApp({ db, secret, logger: quiet, advisor, recommender })
 const call = (app, path, role = 'admin') => request(app).post(`/api${path}`)
   .set('Authorization', `Bearer ${issueToken(users[role], secret)}`)
 
@@ -138,6 +138,69 @@ test('AI route: input is validated and an empty term does not call the provider'
   assert.equal(empty.body.data.aiGenerated, false)
   assert.deepEqual(empty.body.data.atRiskStudents, [])
   assert.equal(called, false)
+})
+
+test('course recommendations: student only; admin gets 403, no token gets 401', async () => {
+  const app = build()
+  const response = await call(app, '/ai/course-recommendations').send({ careerGoal: 'Data engineer' })
+  assert.equal(response.status, 403)
+  assert.equal(response.body.error.code, 'FORBIDDEN')
+  await request(app).post('/api/ai/course-recommendations').send({ careerGoal: 'x' }).expect(401)
+})
+
+test('course recommendations: only open catalog courses the student has not taken, at most three', async () => {
+  const fake = gemini({
+    summary: 'These fit your goal.',
+    recommendations: [
+      { courseId: 'c4', reason: 'Algorithms are core for data work.' },
+      { courseId: 'c1', reason: 'Already taken by andi.' },
+      { courseId: 'HACK', reason: 'Not a course.' },
+      { courseId: 'c4', reason: 'Duplicate.' },
+      { courseId: 'c5', reason: 'Databases matter for a data engineer.' },
+      { courseId: 'c6', reason: 'Third pick.' },
+      { courseId: 'c7', reason: 'Fourth pick is cut.' },
+    ],
+  })
+  const recommender = createGeminiRecommender({ apiKey: 'test-key', fetchImpl: fake.fetchImpl, logger: quiet })
+  const response = await call(build(undefined, recommender), '/ai/course-recommendations', 'andi')
+    .send({ careerGoal: 'Data engineer', interests: 'databases', skills: '', workload: 'balanced' }).expect(200)
+  const { data } = response.body
+  assert.equal(data.aiGenerated, true)
+  assert.equal(data.summary, 'These fit your goal.')
+  assert.ok(data.recommendations.length <= 3)
+  assert.equal(data.recommendations[0].courseId, 'c4')
+  assert.equal(data.recommendations[0].code, 'CS301')
+  assert.equal(data.recommendations[0].credits, 3)
+  for (const course of data.recommendations) assert.ok(!['c1', 'c2', 'c3', 'HACK'].includes(course.courseId))
+  assert.equal(new Set(data.recommendations.map((c) => c.courseId)).size, data.recommendations.length)
+  // Taken courses are not offered to the model, and no personal data is sent to the provider.
+  const sent = fake.calls[0].options.body
+  assert.ok(!sent.includes('Andi') && !sent.includes('CS2023001') && !sent.includes('@'))
+  assert.ok(sent.includes('Data engineer'))
+  assert.ok(!sent.includes('\\"courseId\\":\\"c1\\"'))
+})
+
+test('course recommendations: input is validated and provider failures are clear JSON errors', async () => {
+  let called = false
+  const app = build(undefined, async () => { called = true; return { summary: 'x', recommendations: [] } })
+  const student = (body) => call(app, '/ai/course-recommendations', 'andi').send(body)
+  await student({}).expect(400)
+  await student({ careerGoal: '   ' }).expect(400)
+  await student({ careerGoal: 'x'.repeat(121) }).expect(400)
+  await student({ careerGoal: 'Engineer', workload: 'extreme' }).expect(400)
+  await student({ careerGoal: 'Engineer', userId: 'u3' }).expect(400)
+  assert.equal(called, false)
+  const empty = await student({ careerGoal: 'Engineer' }).expect(200)
+  assert.deepEqual(empty.body.data.recommendations, [])
+
+  const unavailable = await call(build(undefined, createGeminiRecommender({ apiKey: '', logger: quiet })),
+    '/ai/course-recommendations', 'andi').send({ careerGoal: 'Engineer' })
+  assert.equal(unavailable.status, 503)
+  assert.equal(unavailable.body.error.code, 'AI_UNAVAILABLE')
+  const bad = await call(build(undefined, createGeminiRecommender({ apiKey: 'k', logger: quiet,
+    fetchImpl: gemini({ wrong: true }).fetchImpl })), '/ai/course-recommendations', 'andi').send({ careerGoal: 'Engineer' })
+  assert.equal(bad.status, 502)
+  assert.equal(bad.body.error.code, 'AI_BAD_RESPONSE')
 })
 
 test('AI key is read only from the environment and documented only as an empty name', () => {

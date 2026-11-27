@@ -100,6 +100,18 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="recommend"
+        options={{
+          title: 'Course Recommendation',
+          tabBarLabel: 'Recommend',
+          // Students only: POST /api/ai/course-recommendations uses the caller's own records.
+          href: isStudent ? '/recommend' : null,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="bulb" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'My Profile',

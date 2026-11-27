@@ -113,4 +113,11 @@ export const api = {
       body: { term },
       timeoutMs: AI_TIMEOUT_MS,
     }).then((r) => r.data),
+  // Student only (403 for an administrator). Body: { careerGoal, interests?, skills?, workload? }.
+  aiCourseRecommendations: (answers) =>
+    apiFetch('/api/ai/course-recommendations', {
+      method: 'POST',
+      body: answers,
+      timeoutMs: AI_TIMEOUT_MS,
+    }).then((r) => r.data),
 }
