@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import FormPage from './pages/FormPage'
 import FormOutput from './pages/FormOutput'
 import AiAdvisor from './pages/AiAdvisor'
+import CourseRecommendation from './pages/CourseRecommendation'
 import Enrollments from './pages/Enrollments'
 import Profile from './pages/Profile'
 import NotFound from './pages/NotFound'
@@ -271,6 +272,14 @@ function App() {
             element={
               <ProtectedRoute user={currentUser} allowedRoles={['administrator']}>
                 <AiAdvisor courses={courses} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/course-recommendation"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={['client']}>
+                <CourseRecommendation />
               </ProtectedRoute>
             }
           />

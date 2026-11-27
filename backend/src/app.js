@@ -7,7 +7,8 @@ import { ApiError, badRequest, conflict, notFound } from './errors.js'
 import { fields, courseInput, scoreInput, text } from './validation.js'
 import { createStore, safeUser } from './store.js'
 import { gpaForGrades } from './grading.js'
-import { checkedReport, createGeminiAdvisor, riskFacts } from './ai.js'
+import { checkedRecommendations, checkedReport, createGeminiAdvisor, createGeminiRecommender, recommendationFacts,
+  riskFacts, workloads } from './ai.js'
 
 // A missing username still performs a password comparison.
 const dummyPasswordHash = bcrypt.hashSync('unused-account-password', 12)
@@ -23,7 +24,7 @@ function constraintKind(error) {
 }
 
 export function createApp({ db, secret, origin = 'http://localhost:5173', logger = console.error,
-  advisor = createGeminiAdvisor({ logger }) }) {
+  advisor = createGeminiAdvisor({ logger }), recommender = createGeminiRecommender({ logger }) }) {
   if (!secret || secret.length < 32) throw new Error('A JWT secret of at least 32 characters is required.')
   const app = express()
   const store = createStore(db)
@@ -228,6 +229,28 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
     }
     const report = checkedReport(await advisor(term, facts), facts)
     res.json({ data: { term, generatedAt, aiGenerated: true, ...report } })
+  })
+
+  // AI for students: 0-3 course recommendations. The student sends only their answers; their history
+  // and the open catalog come from the database, and only catalog courses can be returned.
+  app.post('/api/ai/course-recommendations', student, async (req, res) => {
+    fields(req.body, ['careerGoal', 'interests', 'skills', 'workload'], ['careerGoal'])
+    const optional = (field, max) => (req.body[field] === undefined || req.body[field] === ''
+      ? undefined : text(req.body[field], field, max))
+    const answers = { careerGoal: text(req.body.careerGoal, 'careerGoal', 120),
+      interests: optional('interests', 300), skills: optional('skills', 300), workload: optional('workload', 20) }
+    if (answers.workload && !workloads.includes(answers.workload)) {
+      badRequest(`workload must be one of: ${workloads.join(', ')}.`)
+    }
+    const facts = await recommendationFacts(db, req.user)
+    const generatedAt = new Date().toISOString()
+    if (!facts.candidates.length) {
+      return res.json({ data: { generatedAt, aiGenerated: false,
+        summary: 'There are no open courses you have not taken yet, so there is nothing to recommend.',
+        recommendations: [] } })
+    }
+    const result = checkedRecommendations(await recommender(answers, facts), facts.candidates)
+    res.json({ data: { generatedAt, aiGenerated: true, ...result } })
   })
 
   app.use((req, res, next) => next(new ApiError(404, 'NOT_FOUND', 'The requested endpoint was not found.')))

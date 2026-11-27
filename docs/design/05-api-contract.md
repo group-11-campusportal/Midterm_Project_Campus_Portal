@@ -340,6 +340,39 @@ Response `200`:
 - Errors: `502 AI_FAILED`, `502 AI_BAD_RESPONSE`, `503 AI_UNAVAILABLE`, `503 AI_RATE_LIMITED`,
   `504 AI_TIMEOUT` (see 5.2). The AI call can take up to 25 s: show a loading state and disable the button.
 
+### AI: course recommendations for a student
+
+`POST /api/ai/course-recommendations` — **student only** (an administrator gets `403 FORBIDDEN`).
+
+Request (only these fields; `careerGoal` is required, the rest may be left out or sent as `""`):
+
+```json
+{ "careerGoal": "Data engineer", "interests": "databases, math", "skills": "SQL", "workload": "balanced" }
+```
+
+- `careerGoal` ≤ 120 characters; `interests` and `skills` ≤ 300; `workload` is `light` | `balanced` | `heavy`.
+
+Response `200`:
+
+```json
+{ "data": {
+  "generatedAt": "2026-11-27T09:00:00.000Z", "aiGenerated": true,
+  "summary": "These courses build the base a data engineer needs.",
+  "recommendations": [
+    { "courseId": "c5", "code": "CS302", "title": "Database Systems", "credits": 3, "term": "2024/2025",
+      "instructor": "…", "reason": "You enjoy databases, and this course teaches SQL and data modelling." }
+  ]
+} }
+```
+
+- 0 to 3 recommendations, best first. Only courses the student has **not** requested yet (any status),
+  whose code they are not already taking or have passed, and that still have free seats.
+- Every course field comes from the database; only `summary` and `reason` come from the model.
+- The server adds the student's program, year, GPA and course history. Name, email and student
+  number are **not** sent to the provider.
+- No open course left → `aiGenerated: false`, empty list, provider not called.
+- Clients must label `summary` and `reason` as **AI-generated**. Same errors and 25 s limit as above.
+
 ## 5.5 Worked example (copy and paste)
 
 Sign in as the student, read the scoped list, then request a seat:
