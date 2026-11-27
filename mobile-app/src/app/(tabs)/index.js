@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useFocusEffect, useRouter } from 'expo-router'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
   Pressable,
@@ -30,6 +30,15 @@ export default function DashboardScreen() {
   // Admin course form: null = closed, {} = new course, a course object = edit it
   const [courseForm, setCourseForm] = useState(null)
   const [notice, setNotice] = useState(null)
+  // The "+" button on Enrollments opens this tab with ?focus=catalog: scroll to the Course Catalog.
+  const { focus } = useLocalSearchParams()
+  const listRef = useRef(null)
+  const [catalogY, setCatalogY] = useState(null)
+  useEffect(() => {
+    if (focus !== 'catalog' || catalogY == null) return
+    listRef.current?.scrollToOffset({ offset: Math.max(0, catalogY - spacing.sm), animated: true })
+    router.setParams({ focus: undefined }) // so the next tap on "+" scrolls again
+  }, [focus, catalogY, router])
 
   const {
     items: courses,
@@ -148,6 +157,7 @@ export default function DashboardScreen() {
   return (
     <>
     <FlatList
+      ref={listRef}
       data={catalogItems}
       keyExtractor={(item) => String(item.key)}
       contentContainerStyle={styles.list}
@@ -300,7 +310,7 @@ export default function DashboardScreen() {
           </View>
 
           {/* Search Bar & Section Header */}
-          <View style={styles.sectionHeaderWrap}>
+          <View style={styles.sectionHeaderWrap} onLayout={(e) => setCatalogY(e.nativeEvent.layout.y)}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionHeadLeft}>
                 <View style={styles.sectionIcon}>

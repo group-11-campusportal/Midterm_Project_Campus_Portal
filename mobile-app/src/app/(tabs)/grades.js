@@ -97,6 +97,10 @@ export default function GradesScreen() {
   const highGrades = grades.filter((g) => (Number(g.points) || 0) >= 3.5).length
   const gpaDisplay = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
   const terms = [...new Set(grades.map((g) => g.term))].sort().join(', ')
+  // Current academic term, like the "Academic Term" card on the web Grade Records page:
+  // the newest term among grades and enrollments.
+  const currentTerm = [...new Set([...grades, ...(enrollments || [])].map((r) => r.term).filter(Boolean))]
+    .sort().reverse()[0] ?? '—'
   const showCourses = !isAdmin && activeTab === 'courses'
 
   const stats = isAdmin
@@ -104,6 +108,7 @@ export default function GradesScreen() {
         { label: 'Total grades', value: String(gradedCount) },
         { label: 'Average score', value: averageScore === '—' ? '—' : `${averageScore}` },
         { label: 'Grades ≥ 3.5 pts', value: String(highGrades) },
+        { label: 'Academic term', value: currentTerm },
       ]
     : [
         { label: 'GPA (4.0 scale)', value: gpaDisplay },
@@ -132,9 +137,16 @@ export default function GradesScreen() {
               end={{ x: 1, y: 1 }}
               style={[styles.hero, { paddingTop: insets.top + spacing.md }]}
             >
-              <View style={styles.eyebrow}>
-                <Ionicons name={isAdmin ? 'library-outline' : 'school-outline'} size={13} color="#ffffff" />
-                <Text style={styles.eyebrowText}>{isAdmin ? 'Academic Registry' : 'My Academic Records'}</Text>
+              <View style={styles.eyebrowRow}>
+                <View style={styles.eyebrow}>
+                  <Ionicons name={isAdmin ? 'library-outline' : 'school-outline'} size={13} color="#ffffff" />
+                  <Text style={styles.eyebrowText}>{isAdmin ? 'Academic Registry' : 'My Academic Records'}</Text>
+                </View>
+                {isAdmin && currentTerm !== '—' ? (
+                  <View style={styles.termTag}>
+                    <Text style={styles.termTagText}>Term {currentTerm}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.heroTitle}>
                 {isAdmin ? 'University Grade Records' : 'My Academic Grades'}
@@ -147,7 +159,7 @@ export default function GradesScreen() {
 
               <View style={styles.statsRow}>
                 {stats.map((stat) => (
-                  <View key={stat.label} style={styles.statTile}>
+                  <View key={stat.label} style={[styles.statTile, stats.length === 4 && styles.statTileHalf]}>
                     <Text style={styles.statValue}>{stat.value}</Text>
                     <Text style={styles.statLabel}>{stat.label}</Text>
                   </View>
@@ -409,7 +421,12 @@ const styles = StyleSheet.create({
   eyebrowText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
   heroTitle: { fontSize: font.heading + 2, fontWeight: '800', color: '#ffffff' },
   heroDescription: { fontSize: font.small + 1, color: '#dbeafe', lineHeight: 20 },
-  statsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  // Four admin tiles sit in a 2 × 2 grid; three student tiles stay in one row.
+  statTileHalf: { flexBasis: '47%' },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  termTag: { backgroundColor: 'rgba(0, 0, 0, 0.18)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill },
+  termTagText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
   statTile: {
     flex: 1, backgroundColor: 'rgba(255, 255, 255, 0.12)', borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)', borderRadius: radii.md,

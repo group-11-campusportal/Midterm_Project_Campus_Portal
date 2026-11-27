@@ -3,10 +3,12 @@ import { useLocation } from 'react-router-dom'
 import StatusBadge from '../components/StatusBadge'
 import StudentDetailModal from '../components/StudentDetailModal'
 import EditGradeModal from '../components/EditGradeModal'
+import RecordGradeModal from '../components/RecordGradeModal'
+import StudentGradesView from '../components/StudentGradesView'
 
 // The "form output" page. It reads the shared state that lives in App,
 // so every record added on the form page shows up here — newest first.
-function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, onWithdrawEnrollment }) {
+function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUpdateGrade, onDeleteGrade, onWithdrawEnrollment }) {
   const location = useLocation()
   const successMessage = location.state?.success
   const isAdministrator = user.role === 'administrator'
@@ -14,6 +16,9 @@ function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, o
   const [filterTerm, setFilterTerm] = useState('all')
   const [selectedRecord, setSelectedRecord] = useState(null)
   const [editingGrade, setEditingGrade] = useState(null)
+  const [recordOpen, setRecordOpen] = useState(false)
+  const [recordInitial, setRecordInitial] = useState(null)
+  const [recordNotice, setRecordNotice] = useState('')
 
   const baseRows = useMemo(() => {
     return isAdministrator
@@ -67,6 +72,21 @@ function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, o
     return { total, approved, pending, credits }
   }, [isAdministrator, grades, enrollments, user.studentId])
 
+  // Administrator: approved enrollments without a grade, oldest first (the grading to-do list).
+  const ungradedEnrollments = useMemo(() => {
+    if (!isAdministrator) return []
+    const graded = new Set(grades.map((g) => g.enrollmentId))
+    return enrollments
+      .filter((e) => e.status === 'approved' && !graded.has(e.id))
+      .sort((a, b) => String(a.enrolledAt).localeCompare(String(b.enrolledAt)))
+  }, [isAdministrator, enrollments, grades])
+
+  function openRecord(enrollment) {
+    setRecordNotice('')
+    setRecordInitial(enrollment)
+    setRecordOpen(true)
+  }
+
   function getAvatarInitials(name) {
     if (!name) return 'ST'
     return name
@@ -84,6 +104,28 @@ function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, o
     if (char === 'B') return 'grade-badge-chip--b'
     if (char === 'C') return 'grade-badge-chip--c'
     return 'grade-badge-chip--d'
+  }
+
+  // Students get the same "My Academic Grades" page as the mobile Grades tab.
+  if (!isAdministrator) {
+    return (
+      <>
+        <StudentGradesView
+          user={user}
+          enrollments={enrollments}
+          grades={grades}
+          successMessage={successMessage}
+          onSelectEnrollment={setSelectedRecord}
+        />
+        <StudentDetailModal
+          record={selectedRecord}
+          key={selectedRecord?.id ?? 'none'}
+          onClose={() => setSelectedRecord(null)}
+          grades={grades}
+          onWithdraw={onWithdrawEnrollment}
+        />
+      </>
+    )
   }
 
   return (
@@ -128,13 +170,54 @@ function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, o
               ? 'Complete historical ledger of grades recorded across all programs, updated in real time.'
               : 'Every enrollment submission and status receipt for your academic term.'}
           </p>
+          {isAdministrator ? (
+            <button
+              type="button"
+              className="rg-hero-btn"
+              onClick={() => openRecord(null)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" width="18" height="18" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="16" />
+                <line x1="8" y1="12" x2="16" y2="12" />
+              </svg>
+              Record Grade
+            </button>
+          ) : null}
         </div>
       </section>
 
-      {successMessage ? (
+      {successMessage && !recordNotice ? (
         <p className="alert alert--success" role="status" style={{ marginTop: '16px' }}>
           {successMessage}
         </p>
+      ) : null}
+      {recordNotice ? (
+        <p className="alert alert--success" role="status" style={{ marginTop: '16px' }}>
+          {recordNotice}
+        </p>
+      ) : null}
+
+      {isAdministrator && ungradedEnrollments.length > 0 ? (
+        <section className="ungraded-card" role="status" style={{ marginTop: '16px' }}>
+          <div className="ungraded-card__head">
+            <strong>
+              {ungradedEnrollments.length} approved {ungradedEnrollments.length === 1 ? 'enrollment has' : 'enrollments have'} no grade yet
+            </strong>
+            <span>Oldest first. Click Grade to record it.</span>
+          </div>
+          <ul className="ungraded-card__list">
+            {ungradedEnrollments.map((e) => (
+              <li key={e.id}>
+                <span className="ungraded-card__who">{e.studentName} · {e.studentId}</span>
+                <span className="ungraded-card__what">{e.courseCode} {e.courseTitle} · Term {e.term}</span>
+                <button type="button" className="btn btn--small btn--outline" onClick={() => openRecord(e)}>
+                  Grade
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {/* Summary Statistics Row */}
@@ -427,6 +510,23 @@ function FormOutput({ user, enrollments, grades, onUpdateGrade, onDeleteGrade, o
         grades={grades}
         onWithdraw={isAdministrator ? undefined : onWithdrawEnrollment}
       />
+
+      {recordOpen ? (
+        <RecordGradeModal
+          key={recordInitial?.id ?? 'new'}
+          initial={recordInitial}
+          students={students}
+          enrollments={enrollments}
+          grades={grades}
+          onClose={() => setRecordOpen(false)}
+          onRecord={async (input) => {
+            const grade = await onAddGrade(input)
+            setRecordNotice(
+              `Grade ${grade.letter} (${Number(grade.points).toFixed(1)} pts) recorded for ${grade.studentName} in ${grade.courseCode}.`,
+            )
+          }}
+        />
+      ) : null}
 
       {editingGrade ? (
         <EditGradeModal

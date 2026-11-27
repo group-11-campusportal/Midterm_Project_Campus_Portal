@@ -7,14 +7,14 @@ function buildNavItems(role) {
 
   const items = [
     { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    {
-      to: '/form',
-      label: isAdministrator ? 'Record Grade' : 'Enroll in Course',
-      icon: 'form',
-    },
+    // Administrator: review enrollment requests, like the mobile Enrollments tab.
+    ...(isAdministrator ? [{ to: '/enrollments', label: 'Enrollments', icon: 'enrollments' }] : []),
+    // Administrators record grades from the Grade Records page (Record Grade button),
+    // so the separate "Record Grade" tab is only the students' "Enroll in Course".
+    ...(isAdministrator ? [] : [{ to: '/form', label: 'Enroll in Course', icon: 'form' }]),
     {
       to: '/output',
-      label: isAdministrator ? 'Grade Records' : 'My Submissions',
+      label: isAdministrator ? 'Grade Records' : 'My Grades',
       icon: 'output',
     },
   ]
@@ -50,6 +50,16 @@ function NavIcon({ name }) {
         <path d="M4 2.5h8l4 4V17.5H4z" />
         <path d="M12 2.5v4h4" />
         <path d="M6.5 13.5h7M6.5 10.5h4" />
+      </svg>
+    )
+  }
+
+  if (name === 'enrollments') {
+    return (
+      <svg className="sidebar__icon" viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="4.5" y="3.5" width="11" height="14" rx="2" />
+        <path d="M7.5 3.5v-1h5v1" />
+        <path d="M7.5 9.5l1.8 1.8 3.4-3.6" />
       </svg>
     )
   }

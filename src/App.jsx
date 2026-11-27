@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import FormPage from './pages/FormPage'
 import FormOutput from './pages/FormOutput'
 import AiAdvisor from './pages/AiAdvisor'
+import Enrollments from './pages/Enrollments'
 import Profile from './pages/Profile'
 import NotFound from './pages/NotFound'
 import { apiFetch, clearToken, getToken } from './lib/api'
@@ -206,11 +207,9 @@ function App() {
                 courses={courses}
                 enrollments={enrollments}
                 grades={grades}
-                students={students}
                 isLoading={isDataLoading}
                 dataError={dataError}
                 onRetry={() => loadPortalData(currentUser)}
-                onUpdateEnrollmentStatus={updateEnrollmentStatus}
                 onCreateCourse={createCourse}
                 onUpdateCourse={updateCourse}
                 onDeleteCourse={deleteCourse}
@@ -218,8 +217,23 @@ function App() {
             }
           />
           <Route
+            path="/enrollments"
+            element={
+              <ProtectedRoute user={currentUser} allowedRoles={['administrator']}>
+                <Enrollments
+                  enrollments={enrollments}
+                  courses={courses}
+                  onUpdateEnrollmentStatus={updateEnrollmentStatus}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/form"
             element={
+              currentUser?.role === 'administrator' ? (
+              <Navigate to="/output" replace />
+            ) : (
               <FormPage
                 user={currentUser}
                 courses={courses}
@@ -230,6 +244,7 @@ function App() {
                 onAddGrade={addGrade}
                 onWithdrawEnrollment={withdrawEnrollment}
               />
+            )
             }
           />
           <Route
@@ -239,6 +254,8 @@ function App() {
                 user={currentUser}
                 enrollments={enrollments}
                 grades={grades}
+                students={students}
+                onAddGrade={addGrade}
                 onUpdateGrade={updateGrade}
                 onDeleteGrade={deleteGrade}
                 onWithdrawEnrollment={withdrawEnrollment}

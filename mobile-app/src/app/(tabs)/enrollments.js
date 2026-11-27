@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useRouter } from 'expo-router'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Alert,
@@ -32,6 +32,7 @@ function age(dateText) {
 export default function EnrollmentsScreen() {
   const { user } = useAuth()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
   const isAdmin = user?.role === 'administrator'
   const { items, error, refreshing, reload, refresh } = useApiList(api.enrollments)
   // Seat counts for the administrator's decision (approved / capacity per course).
@@ -129,10 +130,12 @@ export default function EnrollmentsScreen() {
   if (!items) return <LoadingView label="Loading enrollments…" />
 
   return (
+    <View style={styles.screen}>
     <FlatList
       data={filteredItems}
       keyExtractor={(enrollment) => String(enrollment.id)}
-      contentContainerStyle={styles.list}
+      // Students: extra room at the end so the floating "+" never covers the last card.
+      contentContainerStyle={[styles.list, !isAdmin && styles.listWithFab]}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -283,6 +286,18 @@ export default function EnrollmentsScreen() {
         </View>
       )}
     />
+    {/* Floating "+": stays in the bottom-right corner above the tab bar however long the list is. */}
+    {isAdmin ? null : (
+      <Pressable
+        onPress={() => router.navigate({ pathname: '/', params: { focus: 'catalog' } })}
+        style={({ pressed }) => [styles.fab, shadow.glow, pressed && styles.fabPressed]}
+        accessibilityRole="button"
+        accessibilityLabel="Enroll in a new course from the course catalog"
+      >
+        <Ionicons name="add" size={30} color="#ffffff" />
+      </Pressable>
+    )}
+    </View>
   )
 }
 
@@ -509,4 +524,18 @@ const styles = StyleSheet.create({
   approveText: { fontSize: font.xs, fontWeight: '700', color: colors.success },
   rejectText: { fontSize: font.xs, fontWeight: '700', color: colors.danger },
   btnPressed: { opacity: 0.75 },
+  screen: { flex: 1, backgroundColor: colors.background },
+  listWithFab: { paddingBottom: 56 + spacing.lg * 2 },
+  fab: {
+    position: 'absolute',
+    right: spacing.lg,
+    bottom: spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  fabPressed: { opacity: 0.85, transform: [{ scale: 0.95 }] },
 })
