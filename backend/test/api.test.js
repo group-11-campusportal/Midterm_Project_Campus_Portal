@@ -101,12 +101,17 @@ test('login rejects wrong credentials, SQL injection, missing fields, and role s
   }
 })
 
+const register = () => request(app).post('/api/auth/register')
+const signUp = (overrides = {}) => register().send({
+  username: 'budi', email: 'budi@student.campus.edu', password: 'Password!23', ...overrides,
+})
+
 test('sign-up creates a student that can log in and only sees their own rows', async () => {
-  const response = await request(app).post('/api/auth/register')
-    .send({ username: ' Budi.S ', password: 'Password!23' }).expect(201)
+  const response = await signUp({ username: ' Budi.S ', email: ' Budi.S@Student.Campus.edu ' }).expect(201)
   const { user, token } = response.body
   assert.equal(user.role, 'client')
   assert.equal(user.username, 'budi.s')
+  assert.equal(user.email, 'budi.s@student.campus.edu')
   assert.match(user.studentId, /^ST[0-9A-F]{10}$/)
   assert.equal(user.password_hash, undefined)
   const stored = await db.get('SELECT password_hash FROM users WHERE id = ?', [user.id])
@@ -119,29 +124,34 @@ test('sign-up creates a student that can log in and only sees their own rows', a
   await request(app).post('/api/auth/login').send({ username: 'Budi.S', password: 'Password!23' }).expect(200)
 })
 
-test('sign-up rejects taken usernames, bad input and role spoofing', async () => {
-  for (const username of ['andi', 'ANDI', 'budi']) {
-    if (username === 'budi') await request(app).post('/api/auth/register').send({ username, password: 'Password!23' }).expect(201)
-    const taken = await request(app).post('/api/auth/register').send({ username, password: 'Password!23' }).expect(409)
+test('sign-up rejects taken usernames and emails, bad input and role spoofing', async () => {
+  await signUp().expect(201)
+  for (const overrides of [
+    { username: 'andi', email: 'new1@student.campus.edu' }, { username: 'ANDI', email: 'new2@student.campus.edu' },
+    { username: 'budi', email: 'new3@student.campus.edu' }, { username: 'carla', email: 'BUDI@student.campus.edu' },
+    { username: 'carla', email: 'andi.pratama@student.campus.edu' },
+  ]) {
+    const taken = await signUp(overrides).expect(409)
     assert.equal(taken.body.error.code, 'CONFLICT')
   }
-  for (const body of [{}, { username: 'ab', password: 'Password!23' }, { username: 'has space', password: 'Password!23' },
-    { username: 'carla', password: 'short' }, { username: 'carla', password: 'A!' + 'a'.repeat(71) },
-    { username: 'carla', password: 'password!23' }, { username: 'carla', password: 'Password123' },
-    { username: 'carla', password: 'Pass word1' },
-    { username: 12, password: 'Password!23' },
-    { username: 'carla', password: 'Password!23', role: 'administrator' }]) {
-    await request(app).post('/api/auth/register').send(body).expect(400)
+  const carla = { username: 'carla', email: 'carla@student.campus.edu' }
+  for (const overrides of [
+    { username: 'ab' }, { username: 'has space' }, { username: 12 },
+    { email: 'carla@gmail.com' }, { email: 'carla@campus.edu' }, { email: 'carla@student.campus.edu.evil.com' },
+    { email: 'not-an-email' }, { email: '' }, { email: 5 },
+    { password: 'short' }, { password: 'A!' + 'a'.repeat(71) }, { password: 'password!23' },
+    { password: 'Password123' }, { password: 'Pass word1' }, { role: 'administrator' },
+  ]) {
+    await signUp({ ...carla, ...overrides }).expect(400)
   }
+  for (const body of [{}, { username: 'carla', password: 'Password!23' }]) await register().send(body).expect(400)
   assert.equal(await db.get("SELECT 1 FROM users WHERE username = 'carla'"), undefined)
 })
 
 test('sign-ups are limited per network with 429', async () => {
   app = createApp({ db, secret, logger: (error) => { throw error }, limits: { register: { max: 2, windowMs: 60000 } } })
-  for (const username of ['one1', 'two2']) {
-    await request(app).post('/api/auth/register').send({ username, password: 'Password!23' }).expect(201)
-  }
-  const blocked = await request(app).post('/api/auth/register').send({ username: 'three', password: 'Password!23' }).expect(429)
+  for (const username of ['one1', 'two2']) await signUp({ username, email: `${username}@student.campus.edu` }).expect(201)
+  const blocked = await signUp({ username: 'three', email: 'three@student.campus.edu' }).expect(429)
   assert.ok(Number(blocked.headers['retry-after']) > 0)
 })
 

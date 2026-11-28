@@ -84,14 +84,19 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
   })
 
   // Self sign-up creates a student (client) only; administrators are never created here.
-  // Only username and password are asked; name, email and student ID are filled in for the student.
+  // Only username, university email and password are asked; name and student ID are filled in.
   app.post('/api/auth/register', async (req, res) => {
-    fields(req.body, ['username', 'password'])
+    fields(req.body, ['username', 'email', 'password'])
     const wait = registerLimiter.retryAfter(req.ip)
     if (wait) tooManyRequests(res, wait, `Too many sign-ups from this network. Try again in ${Math.ceil(wait / 60)} minute(s).`)
-    const { username, password } = req.body
+    const { username, email, password } = req.body
     if (typeof username !== 'string' || !/^[a-z0-9._-]{3,30}$/i.test(username.trim())) {
       badRequest('username must be 3-30 characters: letters, numbers, dot, dash or underscore.')
+    }
+    // Only university student addresses may sign up.
+    if (typeof email !== 'string' || email.trim().length > 254
+      || !/^[a-z0-9._%+-]+@student\.campus\.edu$/i.test(email.trim())) {
+      badRequest('email must be a university address ending in @student.campus.edu.')
     }
     // Sign-up only: existing accounts keep logging in with whatever password they have.
     if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72
@@ -102,12 +107,16 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
     if (await db.get('SELECT 1 FROM users WHERE lower(username) = ?', [name])) {
       conflict('This username is already taken.')
     }
+    const address = email.trim().toLowerCase()
+    if (await db.get('SELECT 1 FROM users WHERE lower(email) = ?', [address])) {
+      conflict('This email is already registered.')
+    }
     registerLimiter.hit(req.ip)
     const id = `u-${randomUUID()}`
     const studentId = `ST${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`
     await db.run(`INSERT INTO users (id, username, password_hash, role, name, email, student_id, program, year)
       VALUES (?, ?, ?, 'client', ?, ?, ?, 'Undeclared', 1)`,
-    [id, name, await bcrypt.hash(password, 12), name, `${name}@student.campus.edu`, studentId])
+    [id, name, await bcrypt.hash(password, 12), name, address, studentId])
     const user = await store.user(id)
     res.status(201).json({ token: issueToken(id, secret), tokenType: 'Bearer', expiresIn: 3600, user: safeUser(user) })
   })
