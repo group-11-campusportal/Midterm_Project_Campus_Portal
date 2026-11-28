@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const EMPTY = { code: '', title: '', credits: '3', term: '2024/2025', instructor: '', capacity: '30' }
+const EMPTY = { code: '', title: '', credits: '3', term: '', instructor: '', capacity: '30', isOpen: true }
 
 // Same limits as backend/src/validation.js (courseInput), so most mistakes are caught before the request.
 function validate(form) {
@@ -27,12 +27,13 @@ function validate(form) {
  * The server refuses (409) to delete a course with enrollments, to change code/term after an
  * enrollment exists, or to set capacity below the approved count; that message is shown here.
  */
-function CourseFormModal({ course, onClose, onCreate, onUpdate, onDelete }) {
+// defaultTerm: the newest term in the catalog, pre-filled for a new course.
+function CourseFormModal({ course, defaultTerm = '', onClose, onCreate, onUpdate, onDelete }) {
   const isEdit = Boolean(course?.id)
   const [form, setForm] = useState(() => (isEdit
     ? { code: course.code, title: course.title, credits: String(course.credits), term: course.term,
-        instructor: course.instructor, capacity: String(course.capacity) }
-    : EMPTY))
+        instructor: course.instructor, capacity: String(course.capacity), isOpen: course.isOpen !== false }
+    : { ...EMPTY, term: defaultTerm }))
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -47,8 +48,8 @@ function CourseFormModal({ course, onClose, onCreate, onUpdate, onDelete }) {
   }, [busy, onClose])
 
   function update(event) {
-    const { name, value } = event.target
-    setForm((previous) => ({ ...previous, [name]: value }))
+    const { name, value, type, checked } = event.target
+    setForm((previous) => ({ ...previous, [name]: type === 'checkbox' ? checked : value }))
     setErrors((previous) => ({ ...previous, [name]: undefined }))
     setSubmitError('')
   }
@@ -74,6 +75,7 @@ function CourseFormModal({ course, onClose, onCreate, onUpdate, onDelete }) {
     const input = {
       code: form.code.trim(), title: form.title.trim(), credits: Number(form.credits),
       term: form.term.trim(), instructor: form.instructor.trim(), capacity: Number(form.capacity),
+      isOpen: form.isOpen,
     }
     run(() => (isEdit ? onUpdate(course.id, input) : onCreate(input)))
   }
@@ -122,9 +124,14 @@ function CourseFormModal({ course, onClose, onCreate, onUpdate, onDelete }) {
             {field('credits', 'Credits (SKS)', { type: 'number', min: 1, max: 12, step: 1 })}
             {field('capacity', 'Capacity (seats)', { type: 'number', min: 1, step: 1 })}
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
+            <input type="checkbox" name="isOpen" checked={form.isOpen} onChange={update} />
+            Open for enrollment (students can request this course)
+          </label>
           {isEdit ? (
             <p className="table__muted" style={{ margin: 0, fontSize: '12.5px' }}>
-              Code and term cannot change once a student has enrolled. Capacity cannot go below the approved count.
+              Code and term cannot change once a student has enrolled, and credits cannot change once a grade
+              is recorded. Capacity cannot go below the approved count.
             </p>
           ) : null}
           {submitError ? <p className="alert alert--error" role="alert" style={{ margin: 0 }}>{submitError}</p> : null}

@@ -1,21 +1,38 @@
 import { useState } from 'react'
-import { apiFetch } from '../lib/api'
+import { AI_TIMEOUT_MS, apiFetch } from '../lib/api'
+import { termsFromCourses } from '../utils/terms'
 
-function AiAdvisor({ courses = [] }) {
-  // Extract unique terms from available courses or fallback to current academic term
-  const availableTerms = Array.from(
-    new Set(courses.map((c) => c.term).filter(Boolean)),
-  )
-  if (!availableTerms.includes('2024/2025')) {
-    availableTerms.unshift('2024/2025')
+// Messages per API error code (docs/design/05-api-contract.md §5.2), not per message text.
+function friendlyError(err) {
+  switch (err.code) {
+    case 'AI_TIMEOUT':
+    case 'TIMEOUT':
+      return 'The AI evaluation took longer than expected. Please try again.'
+    case 'AI_UNAVAILABLE':
+      return 'The AI advisor is not configured on the server right now. Your academic records are intact.'
+    case 'AI_RATE_LIMITED':
+      return 'The AI service is experiencing high load. Please wait a moment and try again.'
+    case 'AI_FAILED':
+    case 'AI_BAD_RESPONSE':
+      return 'The AI service returned an unexpected answer. Please try again shortly.'
+    default:
+      return err.message || 'Unable to generate the AI advisor report.'
   }
+}
 
-  const [selectedTerm, setSelectedTerm] = useState(availableTerms[0] || '2024/2025')
+function AiAdvisor({ courses = [], isLoading: coursesLoading = false }) {
+  // Terms come from the catalog, newest first. Until the admin picks one, the newest is used, so a
+  // page opened before the courses load still ends on a real term.
+  const availableTerms = termsFromCourses(courses)
+  const [pickedTerm, setPickedTerm] = useState('')
+  const selectedTerm = availableTerms.includes(pickedTerm) ? pickedTerm : (availableTerms[0] ?? '')
+  const setSelectedTerm = setPickedTerm
   const [report, setReport] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
 
   async function handleGenerateReport() {
+    if (!selectedTerm) return
     setIsLoading(true)
     setError(null)
     setReport(null)
@@ -24,19 +41,11 @@ function AiAdvisor({ courses = [] }) {
       const response = await apiFetch('/api/ai/at-risk-summary', {
         method: 'POST',
         body: JSON.stringify({ term: selectedTerm }),
+        timeoutMs: AI_TIMEOUT_MS,
       })
       setReport(response.data)
     } catch (err) {
-      // Friendly, actionable error messages per Capstone checklist requirements
-      let friendlyMessage = err.message || 'Unable to generate AI advisor report.'
-      if (err.message?.includes('timeout') || err.message?.includes('too long')) {
-        friendlyMessage = 'The AI evaluation service took longer than expected to process student records. Please try again.'
-      } else if (err.message?.includes('not configured') || err.message?.includes('unavailable')) {
-        friendlyMessage = 'The AI advisor service is currently not configured or unavailable on the server. Your academic records are intact.'
-      } else if (err.message?.includes('busy')) {
-        friendlyMessage = 'The AI service is experiencing high load. Please wait a moment and try again.'
-      }
-      setError(friendlyMessage)
+      if (err.status !== 401) setError(friendlyError(err))
     } finally {
       setIsLoading(false)
     }
@@ -98,7 +107,8 @@ function AiAdvisor({ courses = [] }) {
               type="button"
               className="btn btn--primary"
               onClick={handleGenerateReport}
-              disabled={isLoading}
+              disabled={isLoading || !selectedTerm}
+              title={!selectedTerm ? (coursesLoading ? 'Loading terms…' : 'Add a course first: there is no term yet') : undefined}
               aria-busy={isLoading}
             >
               {isLoading ? (
@@ -197,10 +207,12 @@ function AiAdvisor({ courses = [] }) {
                   </svg>
                 </div>
                 <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px', color: 'var(--color-text)' }}>
-                  No Academic Risk Indicators Detected
+                  {report.aiGenerated === false ? 'Nothing to Evaluate' : 'No Academic Risk Indicators Detected'}
                 </h3>
                 <p style={{ margin: 0, fontSize: '14px', color: 'var(--color-text-muted)', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
-                  All enrolled students in term {report.term} meet academic progress thresholds with satisfactory grades and registrations.
+                  {report.aiGenerated === false
+                    ? report.overallSummary
+                    : `All enrolled students in term ${report.term} meet academic progress thresholds with satisfactory grades and registrations.`}
                 </p>
               </div>
             ) : (

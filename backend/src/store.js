@@ -24,6 +24,12 @@ export function createStore(db) {
     FROM grades g JOIN enrollments e ON e.id = g.enrollment_id
     JOIN users u ON u.id = e.student_id JOIN courses c ON c.id = e.course_id`
 
+  // is_open is stored as 0/1; the API speaks camelCase booleans.
+  function publicCourse(row) {
+    if (!row) return row
+    const { is_open: isOpen, ...rest } = row
+    return { ...rest, isOpen: Boolean(isOpen) }
+  }
   function publicEnrollment({ userId: _userId, ...row }) {
     return row
   }
@@ -35,8 +41,8 @@ export function createStore(db) {
     user: (id) => db.get('SELECT * FROM users WHERE id = ?', [id]),
     userByUsername: (username) => db.get('SELECT * FROM users WHERE username = ?', [username]),
     students: async () => (await db.all("SELECT * FROM users WHERE role = 'client' ORDER BY student_id")).map(safeUser),
-    courses: () => db.all(`${courseSelect} ORDER BY c.code, c.term, c.id`),
-    course: (id) => db.get(`${courseSelect} WHERE c.id = ?`, [id]),
+    courses: async () => (await db.all(`${courseSelect} ORDER BY c.code, c.term, c.id`)).map(publicCourse),
+    course: async (id) => publicCourse(await db.get(`${courseSelect} WHERE c.id = ?`, [id])),
     enrollment: (id) => db.get(`${enrollmentSelect} WHERE e.id = ?`, [id]),
     // userId always comes from the verified token (req.user.id), never from the request.
     enrollments: async (userId) => (await db.all(`${enrollmentSelect}${userId ? ' WHERE e.student_id = ?' : ''}

@@ -8,6 +8,9 @@ import { StatusBadge } from './ListRow'
 export default function CourseCard({ course, status, onPress, showAction = true }) {
   const seatsLeft = Math.max(0, course.capacity - course.enrolled)
   const isFull = seatsLeft === 0
+  const isClosed = course.isOpen === false
+  // Only a pending or approved request blocks a new one; a rejected one may be made again.
+  const hasActiveRequest = status === 'pending' || status === 'approved'
   const ratio = Math.min(1, course.enrolled / (course.capacity || 1))
   const barColor = isFull ? colors.danger : ratio > 0.8 ? colors.warning : colors.primary
 
@@ -45,10 +48,15 @@ export default function CourseCard({ course, status, onPress, showAction = true 
 
       {showAction ? (
         <View style={styles.footer}>
-          {status ? (
+          {hasActiveRequest ? (
             <>
               <Text style={styles.footerNote}>Your request</Text>
               <StatusBadge status={status} />
+            </>
+          ) : isClosed ? (
+            <>
+              <Text style={styles.footerNote}>Closed for enrollment</Text>
+              <Text style={styles.fullLabel}>Closed</Text>
             </>
           ) : isFull ? (
             <>
@@ -57,7 +65,9 @@ export default function CourseCard({ course, status, onPress, showAction = true 
             </>
           ) : (
             <>
-              <Text style={styles.footerNote}>Open for enrollment</Text>
+              <Text style={styles.footerNote}>
+                {status === 'rejected' ? 'Rejected before · you can ask again' : 'Open for enrollment'}
+              </Text>
               <View style={styles.enrollButton}>
                 <Text style={styles.enrollText}>View & Enroll</Text>
                 <Ionicons name="chevron-forward" size={15} color={colors.primaryText} />

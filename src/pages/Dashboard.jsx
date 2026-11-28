@@ -5,6 +5,7 @@ import Spinner from '../components/Spinner'
 import StudentDetailModal from '../components/StudentDetailModal'
 import CourseFormModal from '../components/CourseFormModal'
 import { computeGpa } from '../utils/grade'
+import { newestTerm } from '../utils/terms'
 
 function Dashboard({
   user,
@@ -39,6 +40,9 @@ function Dashboard({
   }, [myGrades])
 
   const gpa = useMemo(() => computeGpa(myGrades), [myGrades])
+  // A GPA of 0.00 (all F) is real data; only "no grades at all" shows a dash.
+  const gpaText = myGrades.length > 0 ? gpa.toFixed(2) : '—'
+  const currentTerm = newestTerm(courses)
 
   // Filtered courses based on search
   const filteredCourses = useMemo(() => {
@@ -229,8 +233,8 @@ function Dashboard({
                     </div>
                     <div className="capacity-meta">
                       <span>{course.enrolled} / {course.capacity} seats</span>
-                      <span className={isFull ? 'status-text--danger' : 'status-text--muted'}>
-                        {isFull ? 'Full' : `${percent}%`}
+                      <span className={isFull || course.isOpen === false ? 'status-text--danger' : 'status-text--muted'}>
+                        {course.isOpen === false ? 'Closed' : isFull ? 'Full' : `${percent}%`}
                       </span>
                     </div>
                   </div>
@@ -244,6 +248,7 @@ function Dashboard({
           <CourseFormModal
             key={courseForm.id ?? 'new'}
             course={courseForm.id ? courseForm : null}
+            defaultTerm={currentTerm}
             onClose={() => setCourseForm(null)}
             onCreate={onCreateCourse}
             onUpdate={onUpdateCourse}
@@ -303,14 +308,14 @@ function Dashboard({
           <div className="hero-card__top">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="hero-badge">Academic Portal</span>
-              <span className="term-tag">Term 2024/2025</span>
+              {currentTerm ? <span className="term-tag">Term {currentTerm}</span> : null}
             </div>
             <div className="hero-quick-pill">
               <span className="hero-quick-pill__item">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true">
                   <path d="M12 2l9 4.9v6.1c0 5-3.8 9.7-9 11-5.2-1.3-9-6-9-11V6.9l9-4.9z" />
                 </svg>
-                <span>UPH Verified</span>
+                <span>Signed in securely</span>
               </span>
               <div className="hero-quick-pill__divider" />
               <span className="hero-quick-pill__item">
@@ -331,7 +336,7 @@ function Dashboard({
             <div className="hero-card__glance-item">
               <span className="hero-card__glance-label">Current GPA</span>
               <span className="hero-card__glance-val">
-                {gpa > 0 ? gpa.toFixed(2) : '—'}
+                {gpaText}
               </span>
             </div>
             <div className="hero-card__glance-divider" />
@@ -392,7 +397,7 @@ function Dashboard({
             />
             <StatCard
               label="GPA"
-              value={gpa > 0 ? gpa.toFixed(2) : '—'}
+              value={gpaText}
               iconName="trophy"
               iconColor="var(--color-purple)"
               iconBg="var(--color-purple-soft)"

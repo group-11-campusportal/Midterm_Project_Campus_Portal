@@ -5,6 +5,7 @@ import StudentDetailModal from '../components/StudentDetailModal'
 import EditGradeModal from '../components/EditGradeModal'
 import RecordGradeModal from '../components/RecordGradeModal'
 import StudentGradesView from '../components/StudentGradesView'
+import { termsFromCourses } from '../utils/terms'
 
 // The "form output" page. It reads the shared state that lives in App,
 // so every record added on the form page shows up here — newest first.
@@ -27,6 +28,9 @@ function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUp
           .filter((enrollment) => enrollment.studentId === user.studentId)
           .reverse()
   }, [isAdministrator, grades, enrollments, user.studentId])
+
+  // Terms that actually appear in the records, newest first (no hardcoded term list).
+  const terms = useMemo(() => termsFromCourses([...enrollments, ...grades]), [enrollments, grades])
 
   // Filter rows by search and term
   const filteredRows = useMemo(() => {
@@ -59,8 +63,9 @@ function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUp
         total > 0
           ? (grades.reduce((s, g) => s + (Number(g.score) || 0), 0) / total).toFixed(1)
           : '0'
-      const deansListCount = grades.filter((g) => (Number(g.points) || 0) >= 3.5).length
-      return { total, avgScore, deansListCount, term: '2024/2025' }
+      // Grades worth 3.5+ points are exactly the A and A- letters.
+      const topGradeCount = grades.filter((g) => (Number(g.points) || 0) >= 3.5).length
+      return { total, avgScore, topGradeCount, term: terms[0] ?? '' }
     }
     const myEnrollments = enrollments.filter((e) => e.studentId === user.studentId)
     const total = myEnrollments.length
@@ -70,7 +75,7 @@ function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUp
       .filter((e) => e.status === 'approved')
       .reduce((s, e) => s + (e.credits || 0), 0)
     return { total, approved, pending, credits }
-  }, [isAdministrator, grades, enrollments, user.studentId])
+  }, [isAdministrator, grades, enrollments, user.studentId, terms])
 
   // Administrator: approved enrollments without a grade, oldest first (the grading to-do list).
   const ungradedEnrollments = useMemo(() => {
@@ -141,7 +146,7 @@ function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUp
               <span className="hero-badge">
                 {isAdministrator ? 'Academic Registry' : 'My Academic Records'}
               </span>
-              <span className="term-tag">Term 2024/2025</span>
+              {terms[0] ? <span className="term-tag">Term {terms[0]}</span> : null}
             </div>
             <div className="hero-quick-pill">
               <span className="hero-quick-pill__item">
@@ -237,9 +242,9 @@ function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUp
               <span className="table__muted" style={{ fontSize: '12px' }}>Mean across cohort</span>
             </div>
             <div className="output-stat-chip">
-              <span className="output-stat-label">Honors / Dean's List</span>
+              <span className="output-stat-label">A and A- grades</span>
               <span className="output-stat-val" style={{ color: 'var(--color-success)' }}>
-                {stats.deansListCount}
+                {stats.topGradeCount}
               </span>
               <span className="table__muted" style={{ fontSize: '12px' }}>Grades ≥ 3.5 pts</span>
             </div>
@@ -345,7 +350,9 @@ function FormOutput({ user, enrollments, grades, students = [], onAddGrade, onUp
               }}
             >
               <option value="all">All Terms</option>
-              <option value="2024/2025">2024/2025</option>
+              {terms.map((term) => (
+                <option key={term} value={term}>{term}</option>
+              ))}
             </select>
           </div>
         </div>

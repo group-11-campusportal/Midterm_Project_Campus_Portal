@@ -11,9 +11,23 @@ export function previewGrade(score) {
   return band ? { letter: band[1], points: band[2] } : { letter: 'F', points: 0 }
 }
 
-// Parses the score field: a number from 0 to 100 (decimals allowed, comma or dot), else null.
+// Parses the score field: 0–100, comma or dot, at most 2 decimals (the API's rule), else null.
+// Same as parseScore in src/utils/grade.js on the web.
 export function parseScore(text) {
-  const value = Number(String(text).trim().replace(',', '.'))
-  if (String(text).trim() === '' || !Number.isFinite(value) || value < 0 || value > 100) return null
-  return value
+  const trimmed = String(text ?? '').trim()
+  if (!/^\d{1,3}([.,]\d{1,2})?$/.test(trimmed)) return null
+  const value = Number(trimmed.replace(',', '.'))
+  return value >= 0 && value <= 100 ? value : null
+}
+
+// GPA text and standing label. gradedCount 0 (or unknown with gpa missing) means "no grades yet";
+// a real 0.00 GPA (all F) is shown as 0.00, not hidden.
+export function gpaSummary(gpa, gradedCount) {
+  const hasGrades = gradedCount != null ? gradedCount > 0 : gpa != null && Number(gpa) > 0
+  if (!hasGrades || gpa == null) return { text: '—', standing: 'No grades recorded yet', hasGrades: false }
+  const value = Number(gpa)
+  const standing = value >= 3.5 ? 'Excellent Standing (GPA 3.50+)'
+    : value >= 3.0 ? 'Good Academic Standing'
+      : value >= 2.0 ? 'Satisfactory Standing' : 'Below 2.00 · talk to your academic advisor'
+  return { text: value.toFixed(2), standing, hasGrades: true }
 }

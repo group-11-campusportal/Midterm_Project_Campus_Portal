@@ -14,10 +14,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import PrimaryButton from '../../components/PrimaryButton'
 import ProfileQr, { profileQrText } from '../../components/ProfileQr'
 import { useAuth } from '../../context/AuthContext'
+import { gpaSummary } from '../../lib/grading'
 import { colors, font, gradients, radii, shadow, spacing } from '../../theme'
 
 // Same links as the web Profile page. Feedback opens the phone's mail app (Gmail / Outlook).
-const FEEDBACK_URL = 'mailto:01881250031@student.uph.edu?subject=Campus%20Portal%20Feedback'
+// Feedback goes to the project's public issue tracker, not to a personal mailbox.
+const FEEDBACK_URL = 'https://github.com/group-11-campusportal/Midterm_Project_Campus_Portal/issues'
 
 // Same colours as the web icons (.quick-service-icon--* in src/index.css).
 const SERVICE_TONES = {
@@ -28,7 +30,7 @@ const SERVICE_TONES = {
 }
 
 export default function ProfileScreen() {
-  const { user, gpa, signOut } = useAuth()
+  const { user, gpa, gradedCount, signOut } = useAuth()
   const insets = useSafeAreaInsets()
   const [busy, setBusy] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
@@ -49,11 +51,7 @@ export default function ProfileScreen() {
   const displayProgram = user?.program || user?.department || '—'
   const displayYear = user?.year ? `Year ${user.year}` : (user?.title || '—')
 
-  const gpaValue = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
-  const numericGpa = Number(gpa) || 0
-  const standing = numericGpa <= 0 ? 'No grades recorded yet'
-    : numericGpa >= 3.5 ? "Dean's List · First Class Standing"
-      : numericGpa >= 3.0 ? 'Good Academic Standing' : 'Satisfactory Standing'
+  const { text: gpaValue, standing } = gpaSummary(gpa, gradedCount)
   const identityRows = isStudent
     ? [['Student ID', user?.studentId], ['Program', user?.program],
         ['Academic Year', user?.year ? `Year ${user.year}` : null], ['Campus Email', user?.email],
@@ -198,7 +196,7 @@ export default function ProfileScreen() {
           {[
             ['book-outline', 'LMS / Moodle', 'Lecture slides & assignments', 'https://learn.uph.edu/', 'orange'],
             ['library-outline', 'Digital Library', 'Journals, e-books & research', 'https://library.uph.edu', 'blue'],
-            ['chatbox-outline', 'Feedback', 'Email us to help improve the Campus Portal', FEEDBACK_URL, 'green'],
+            ['chatbox-outline', 'Feedback', 'Report a problem or an idea on GitHub', FEEDBACK_URL, 'green'],
             ['people-outline', 'Collaboration Tools', 'Collaborate in Microsoft Teams', 'https://teams.microsoft.com', 'purple'],
           ].map(([icon, title, sub, url, tone]) => (
             <Pressable

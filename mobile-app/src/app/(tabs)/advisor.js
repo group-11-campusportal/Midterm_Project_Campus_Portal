@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import PrimaryButton from '../../components/PrimaryButton'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
+import { termsFromCourses } from '../../lib/terms'
 import { useApiList } from '../../lib/useApiList'
 import { colors, font, gradients, minTap, radii, shadow, spacing } from '../../theme'
 
@@ -62,19 +63,16 @@ export default function AdvisorScreen() {
 
   const { items: courses } = useApiList(api.courses)
 
-  const terms = useMemo(() => {
-    const list = Array.from(new Set((courses ?? []).map((c) => c.term).filter(Boolean)))
-    if (!list.includes('2024/2025')) list.unshift('2024/2025')
-    return list
-  }, [courses])
-
-  const [selectedTerm, setSelectedTerm] = useState('2024/2025')
+  // Terms come from the catalog, newest first; until one is picked the newest is used.
+  const terms = useMemo(() => termsFromCourses(courses ?? []), [courses])
+  const [pickedTerm, setSelectedTerm] = useState('')
+  const selectedTerm = terms.includes(pickedTerm) ? pickedTerm : (terms[0] ?? '')
   const [report, setReport] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
   async function handleGenerate() {
-    if (!isAdmin || busy) return
+    if (!isAdmin || busy || !selectedTerm) return
     setBusy(true)
     setError(null)
     setReport(null)
@@ -162,7 +160,7 @@ export default function AdvisorScreen() {
                 title={busy ? 'Analyzing student records…' : 'Generate AI Risk Report'}
                 onPress={handleGenerate}
                 busy={busy}
-                disabled={busy}
+                disabled={busy || !selectedTerm}
                 icon={<Ionicons name="sparkles" size={18} color="#ffffff" />}
               />
 
@@ -223,9 +221,13 @@ export default function AdvisorScreen() {
                     <View style={styles.emptyIcon}>
                       <Ionicons name="checkmark-circle" size={28} color={colors.success} />
                     </View>
-                    <Text style={styles.emptyTitle}>No Academic Risk Indicators</Text>
+                    <Text style={styles.emptyTitle}>
+                      {report.aiGenerated === false ? 'Nothing to Evaluate' : 'No Academic Risk Indicators'}
+                    </Text>
                     <Text style={styles.emptyText}>
-                      No students were flagged for term {report.term}.
+                      {report.aiGenerated === false
+                        ? `No students have enrollments in term ${report.term}.`
+                        : `No students were flagged for term ${report.term}.`}
                     </Text>
                   </View>
                 ) : (

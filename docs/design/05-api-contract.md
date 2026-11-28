@@ -55,13 +55,15 @@ Failure:
 | 404 | `NOT_FOUND` | the record does not exist **or is not visible to this user** | show an empty/«not found» state |
 | 404 | `NOT_FOUND` | unknown path under `/api` | a client bug |
 | 409 | `CONFLICT` | duplicate enrollment, duplicate `(code, term)`, capacity reached, status already decided, deleting a linked record | show `message`, do not retry blindly |
+| 429 | `TOO_MANY_REQUESTS` | 10 failed logins per IP + username in 15 min, or more than 5 AI requests per user per minute; `Retry-After` header gives the seconds | show `message`, do not retry automatically |
 | 413 | `BODY_TOO_LARGE` | body over 16 KB | a client bug |
 | 502 | `AI_FAILED` / `AI_BAD_RESPONSE` | the AI provider errored or answered something unusable | show `message` and a retry button |
 | 503 | `AI_UNAVAILABLE` / `AI_RATE_LIMITED` | AI key not configured / provider still busy after a retry and the fallback model | show `message`; the rest of the app still works |
 | 504 | `AI_TIMEOUT` | the AI provider took longer than 25 s | show `message` and a retry button |
+| 503 | `DATABASE_BUSY` | a database transaction did not finish within 10 s; nothing was saved | show `message` and a retry button |
 | 500 | `INTERNAL_ERROR` | an unexpected server error; details are logged on Railway, never returned | show a generic failure and a retry |
 
-There is **no rate limiting** and **no password reset**. Both are outside this milestone.
+Rate limits are kept in server memory (reset on restart). There is **no password reset**; it is outside this milestone.
 
 ## 5.3 Shared object shapes
 
@@ -92,7 +94,7 @@ There is **no rate limiting** and **no password reset**. Both are outside this m
 {
   "id": "c2", "code": "CS201", "title": "Data Structures", "credits": 4,
   "term": "2024/2025", "instructor": "Dr. Budi Hartono",
-  "capacity": 35, "enrolled": 1
+  "capacity": 35, "enrolled": 1, "isOpen": true
 }
 ```
 
@@ -179,10 +181,10 @@ bytes), `401 INVALID_CREDENTIALS` (same message whether the username or the pass
 **GET /api/auth/me** — no body. `200` for a student:
 
 ```json
-{ "user": { "id": "u2", "…": "…" }, "gpa": 3.6 }
+{ "user": { "id": "u2", "…": "…" }, "gpa": 3.6, "gradedCount": 2 }
 ```
 
-For an administrator the `gpa` key is absent. `gpa` is `0` when the student has no grades yet.
+For an administrator the `gpa` and `gradedCount` keys are absent. `gpa` is `0` when the student has no grades yet; use `gradedCount === 0` to tell that apart from a real 0.00 GPA.
 Errors: `401 UNAUTHENTICATED`.
 
 Clients call this once at start-up with the stored token: a `200` means "still signed in", a `401`
@@ -211,7 +213,10 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN`.
 
 **GET /api/courses/:id** — `200`: `{ "data": course }`, `404 NOT_FOUND`.
 
-**POST /api/courses** — request (all six fields required):
+`isOpen: false` means the offering is closed: students cannot request it and the AI does not
+recommend it. Existing requests are kept and can still be decided.
+
+**POST /api/courses** — request (six fields required, `isOpen` optional, default `true`):
 
 ```json
 { "code": "CS410", "title": "Machine Learning", "credits": 3,
@@ -222,9 +227,11 @@ Errors: `401 UNAUTHENTICATED`, `403 FORBIDDEN`.
 1–12 integer, `capacity` ≥ 1 integer, `code` ≤ 30 chars, `term` ≤ 40 chars, `title`/`instructor`
 ≤ 200), `409 CONFLICT` (the pair `code` + `term` already exists), `403 FORBIDDEN`.
 
-**PUT /api/courses/:id** — same six fields, all required (a full replace, not a patch). `200` with the
-updated `course`. Errors: `404 NOT_FOUND`, `409 CONFLICT` when the course already has enrollments and
-`code`/`term` changed, or when `capacity` is lower than the approved count, `400 INVALID_INPUT`.
+**PUT /api/courses/:id** — same six fields, all required (a full replace, not a patch); `isOpen` is
+optional and keeps its current value when left out. `200` with the updated `course`. Errors:
+`404 NOT_FOUND`, `409 CONFLICT` when the course already has enrollments and `code`/`term` changed,
+when `capacity` is lower than the approved count, or when `credits` changed after a grade was recorded
+(it would change past GPAs), `400 INVALID_INPUT`.
 
 **DELETE /api/courses/:id** — `204`. Errors: `404 NOT_FOUND`, `409 CONFLICT` when the course has any
 enrollment (`A course with enrollments cannot be deleted.`).
@@ -265,9 +272,10 @@ There is no query parameter for this — a `?studentId=` is ignored.
 ```
 
 The student comes from the token; the body has **only** `courseId`. A new row is always `pending`.
-Errors: `400 INVALID_INPUT`, `403 FORBIDDEN` (administrator), `404 NOT_FOUND` (unknown course),
-`409 CONFLICT` — `You already have an enrollment request for this course and term.` or
-`This course is already full.`
+After a rejection the student may request the same course again: the rejected row goes back to
+`pending` (same `id`, new `enrolledAt`). Errors: `400 INVALID_INPUT`, `403 FORBIDDEN` (administrator),
+`404 NOT_FOUND` (unknown course), `409 CONFLICT` — `You already have a pending or approved request for
+this course.`, `This course is closed for enrollment.` or `This course is already full.`
 
 **PATCH /api/enrollments/:id/status** — request:
 
@@ -275,10 +283,12 @@ Errors: `400 INVALID_INPUT`, `403 FORBIDDEN` (administrator), `404 NOT_FOUND` (u
 { "status": "approved" }
 ```
 
-Only `approved` and `rejected` are accepted. `200` with the updated `enrollment`. Errors:
+Only `approved` and `rejected` are accepted. Allowed changes: `pending → approved`,
+`pending → rejected`, and `approved → rejected` (undo an approval or a dropped course) while the
+enrollment has no grade. `200` with the updated `enrollment`. Errors:
 `400 INVALID_INPUT` (`status must be approved or rejected.`), `404 NOT_FOUND`,
-`409 CONFLICT` (`Only pending enrollment requests can be approved or rejected.`,
-`This course is already full.`).
+`409 CONFLICT` (`Only pending requests can be decided; an approved one can only be changed to rejected.`,
+`Delete the grade before rejecting this enrollment.`, `This course is already full.`).
 
 **DELETE /api/enrollments/:id** — `204`. Rules, in order: `404` when not visible; `409` when the
 enrollment has a grade (`An enrollment with a grade cannot be deleted.`); a student may delete only
@@ -304,7 +314,7 @@ another student's grade returns `404` from `GET /api/grades/:id`.
 ```
 
 `201` with the created `grade` (`letter` and `points` included). `score` must be a number from 0 to
-100 (decimals allowed). Errors: `400 INVALID_INPUT`, `403 FORBIDDEN`, `404 NOT_FOUND` (unknown
+100 with at most 2 decimal places (`84.75` is accepted, `84.999` is refused); the same rule applies to PUT. Errors: `400 INVALID_INPUT`, `403 FORBIDDEN`, `404 NOT_FOUND` (unknown
 enrollment), `409 CONFLICT` — a grade requires an **approved** enrollment, and an enrollment can
 have only one grade.
 
@@ -318,7 +328,7 @@ approved.
 
 `POST /api/ai/at-risk-summary` — **administrator only** (a student gets `403 FORBIDDEN`).
 
-Request: `{ "term": "2024/2025" }` (only this field; `400 INVALID_INPUT` otherwise).
+Request: `{ "term": "2024/2025" }` (only this field, at most 40 characters like a course term; `400 INVALID_INPUT` otherwise).
 
 Response `200`:
 

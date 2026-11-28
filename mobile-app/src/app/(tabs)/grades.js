@@ -18,6 +18,7 @@ import { EmptyView, ErrorView, LoadingView } from '../../components/StateView'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
 import { useApiList } from '../../lib/useApiList'
+import { gpaSummary } from '../../lib/grading'
 import { colors, font, gradients, minTap, radii, shadow, spacing } from '../../theme'
 
 // Wording follows the web pages: "University Grade Records" (admin, src/pages/FormOutput.jsx)
@@ -95,7 +96,7 @@ export default function GradesScreen() {
     ? (grades.reduce((sum, g) => sum + (Number(g.score) || 0), 0) / gradedCount).toFixed(1)
     : '—'
   const highGrades = grades.filter((g) => (Number(g.points) || 0) >= 3.5).length
-  const gpaDisplay = gpa != null && Number(gpa) > 0 ? Number(gpa).toFixed(2) : '—'
+  const gpaDisplay = gpaSummary(gpa, gradedCount).text
   const terms = [...new Set(grades.map((g) => g.term))].sort().join(', ')
   // Current academic term, like the "Academic Term" card on the web Grade Records page:
   // the newest term among grades and enrollments.
@@ -358,11 +359,7 @@ function GradeRow({ grade, showStudent, onPress }) {
 }
 
 function GpaCard({ gpa, totalCredits, count, terms }) {
-  const numeric = Number(gpa) || 0
-  const standing =
-    numeric >= 3.5 ? "Dean's List · First Class Standing"
-      : numeric >= 3.0 ? 'Good Academic Standing'
-        : 'Satisfactory Standing'
+  const { standing } = gpaSummary(gpa, count)
 
   return (
     <View style={[styles.gpaCard, shadow.sm]}>

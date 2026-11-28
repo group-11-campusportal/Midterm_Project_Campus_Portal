@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "University Campus Portal — Grades & Enrollment (Midterm / UTS project, front-end only, hardcoded data).",
+  "description": "Campus Portal web app (React + Vite). Reads all data from the Express API in backend/.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

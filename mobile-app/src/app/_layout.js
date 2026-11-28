@@ -2,11 +2,19 @@ import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from '../context/AuthContext'
-import { LoadingView } from '../components/StateView'
+import { ErrorView, LoadingView } from '../components/StateView'
 
 function RootNavigator() {
-  const { status } = useAuth()
+  const { status, retry } = useAuth()
   if (status === 'loading') return <LoadingView label="Checking your session…" />
+  if (status === 'offline') {
+    return (
+      <ErrorView
+        message="Cannot reach the server to check your session. You are still signed in. Check your connection and try again."
+        onRetry={retry}
+      />
+    )
+  }
   const signedIn = status === 'signedIn'
   return (
     <Stack screenOptions={{ headerShown: false }}>

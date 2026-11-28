@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import request from 'supertest'
-import { openDatabase } from '../src/database.js'
+import { migrations, openDatabase } from '../src/database.js'
 import { seedDatabase } from '../src/seed.js'
 import { createApp } from '../src/app.js'
 import { issueToken } from '../src/auth.js'
@@ -213,19 +213,20 @@ test('AI key is read only from the environment and documented only as an empty n
 
 test('new columns arrive through ALTER TABLE migrations and existing rows are kept', async () => {
   db.close()
-  const steps = [{ version: 2, sql: 'ALTER TABLE courses ADD COLUMN description TEXT' }]
+  const next = migrations.length + 2 // schema.sql is v1, then the shipped migrations
+  const steps = [...migrations, { version: next, sql: 'ALTER TABLE courses ADD COLUMN description TEXT' }]
   db = await openDatabase({ path: dbPath, migrations: steps })
-  assert.equal((await db.get('SELECT version FROM schema_version')).version, 2)
+  assert.equal((await db.get('SELECT version FROM schema_version')).version, next)
   assert.equal((await db.get('SELECT count(*) AS count FROM courses')).count, 6)
   assert.equal((await db.get("SELECT description FROM courses WHERE id = 'c1'")).description, null)
   db.close()
   db = await openDatabase({ path: dbPath, migrations: steps }) // second start: nothing re-applied
-  assert.equal((await db.get('SELECT version FROM schema_version')).version, 2)
+  assert.equal((await db.get('SELECT version FROM schema_version')).version, next)
   db.close()
   await assert.rejects(openDatabase({ path: dbPath, migrations: [
-    ...steps, { version: 3, sql: 'ALTER TABLE nope ADD COLUMN x TEXT' }] }), /Migration to version 3 failed/)
+    ...steps, { version: next + 1, sql: 'ALTER TABLE nope ADD COLUMN x TEXT' }] }), new RegExp(`Migration to version ${next + 1} failed`))
   db = await openDatabase({ path: dbPath, migrations: steps })
-  assert.equal((await db.get('SELECT version FROM schema_version')).version, 2)
+  assert.equal((await db.get('SELECT version FROM schema_version')).version, next)
 })
 
 test('the seed command refuses to run against the production database', () => {
@@ -241,4 +242,40 @@ test('the seed command refuses to run against the production database', () => {
   }
   assert.ok(failure, 'seed must exit with an error')
   assert.match(failure.stderr.toString(), /Refusing to seed/)
+})
+
+test('AI routes: a term up to 40 characters works, and each user is limited per minute', async () => {
+  const app = createApp({ db, secret, logger: quiet, limits: { ai: { max: 2, windowMs: 60000 } },
+    advisor: async () => ({ overallSummary: 'ok', atRiskStudents: [] }),
+    recommender: async () => ({ summary: 'ok', recommendations: [] }) })
+  const term = 'Semester Ganjil 2025/2026 (Reguler)'
+  const response = await call(app, '/ai/at-risk-summary').send({ term }).expect(200)
+  assert.equal(response.body.data.term, term)
+  await call(app, '/ai/at-risk-summary').send({ term: 'x'.repeat(41) }).expect(400) // invalid input is not counted
+  await call(app, '/ai/at-risk-summary').send({ term }).expect(200)
+  const blocked = await call(app, '/ai/at-risk-summary').send({ term }).expect(429)
+  assert.equal(blocked.body.error.code, 'TOO_MANY_REQUESTS')
+  assert.ok(Number(blocked.headers['retry-after']) > 0)
+  await call(app, '/ai/course-recommendations', 'andi').send({ careerGoal: 'Engineer' }).expect(200) // own counter
+})
+
+test('course recommendations skip closed courses and offer a rejected offering again', async () => {
+  await db.run("UPDATE courses SET is_open = 0 WHERE id = 'c6'")
+  let seen
+  const app = build(undefined, async (answers, facts) => {
+    seen = facts.candidates.map((course) => course.courseId)
+    return { summary: 'ok', recommendations: [] }
+  })
+  await call(app, '/ai/course-recommendations', 'bella').send({ careerGoal: 'Engineer' }).expect(200)
+  assert.ok(!seen.includes('c6'))
+  assert.ok(seen.includes('c5')) // bella's CS302 request (e4) was rejected
+})
+
+test('course recommendations: optional answers that are only spaces count as not given', async () => {
+  let answers
+  const app = build(undefined, async (given) => { answers = given; return { summary: 'ok', recommendations: [] } })
+  await call(app, '/ai/course-recommendations', 'andi').send({ careerGoal: 'Engineer', interests: '   ', skills: '' }).expect(200)
+  assert.equal(answers.interests, undefined)
+  assert.equal(answers.skills, undefined)
+  await call(app, '/ai/course-recommendations', 'andi').send({ careerGoal: 'Engineer', interests: 5 }).expect(400)
 })

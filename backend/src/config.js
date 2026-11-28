@@ -53,6 +53,8 @@ export function loadConfig(env = process.env) {
   return {
     // Railway (RAILWAY_ENVIRONMENT) and Render (RENDER) need the server on all interfaces; a laptop stays on loopback.
     host: env.HOST || (env.RAILWAY_ENVIRONMENT || env.RENDER ? '0.0.0.0' : '127.0.0.1'), port, secret,
+    // On Railway/Render one proxy sits in front of the app; trust exactly that hop for req.ip.
+    trustProxy: env.RAILWAY_ENVIRONMENT || env.RENDER ? 1 : false,
     origin: origins.length === 1 ? origins[0] : origins,
     database: databaseConfig(env),
     // Server-only AI key. Empty -> the AI route answers 503 AI_UNAVAILABLE; the rest of the API still works.

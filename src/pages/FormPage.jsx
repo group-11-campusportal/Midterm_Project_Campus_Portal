@@ -3,32 +3,38 @@ import { useNavigate } from 'react-router-dom'
 import DataTable from '../components/DataTable'
 import StatusBadge from '../components/StatusBadge'
 import StudentDetailModal from '../components/StudentDetailModal'
-import { toLetterGrade } from '../utils/grade'
+import { newestTerm } from '../utils/terms'
 
-const TERMS = ['2024/2025']
 const ENROLLMENT_FILTERS = ['All', 'Approved', 'Pending', 'Rejected']
-const CATALOG_FILTERS = ['All', 'Open', 'Full', 'Requested']
+const CATALOG_FILTERS = ['All', 'Open', 'Full', 'Closed', 'Requested']
 
-const emptyEnrollmentForm = { courseId: '', term: TERMS[0] }
-const emptyGradeForm = { studentId: '', courseId: '', score: '', term: TERMS[0] }
+// The term of an enrollment comes from the course offering, so the form keeps only the course.
+const emptyEnrollmentForm = { courseId: '' }
 
-// One form page. The fields and the action depend on the logged-in role,
-// but both paths use controlled inputs, validation, and preventDefault.
+const blockLabels = {
+  pending: 'Request pending', approved: 'Already enrolled', closed: 'Closed', full: 'Class Full',
+}
+const blockMessages = {
+  missing: 'This course is no longer in the catalog. Refresh the page.',
+  pending: 'You already have a pending request for this course.',
+  approved: 'You are already enrolled in this course.',
+  closed: 'This course is closed for enrollment.',
+  full: 'This course is already full.',
+}
+
+// Student "Enroll in Course" page. Administrators never reach it: /form redirects them to /output,
+// where grades are recorded with RecordGradeModal.
 function FormPage({
   user,
   courses,
   enrollments,
   grades,
-  students,
   onAddEnrollment,
-  onAddGrade,
   onWithdrawEnrollment,
 }) {
   const navigate = useNavigate()
-  const isAdministrator = user.role === 'administrator'
 
   const [enrollmentForm, setEnrollmentForm] = useState(emptyEnrollmentForm)
-  const [gradeForm, setGradeForm] = useState(emptyGradeForm)
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -37,6 +43,8 @@ function FormPage({
   const [catalogFilter, setCatalogFilter] = useState('All')
   const [selectedRecord, setSelectedRecord] = useState(null)
 
+  const currentTerm = newestTerm(courses)
+
   function handleEnrollmentChange(event) {
     const { name, value } = event.target
     setEnrollmentForm((previous) => ({ ...previous, [name]: value }))
@@ -44,23 +52,8 @@ function FormPage({
     setSubmitError('')
   }
 
-  function handleGradeChange(event) {
-    const { name, value } = event.target
-    setGradeForm((previous) => ({
-      ...previous,
-      [name]: value,
-      ...(name === 'studentId' || name === 'term' ? { courseId: '' } : {}),
-    }))
-    setErrors({})
-    setSubmitError('')
-  }
-
   function selectCourse(courseId) {
-    if (isAdministrator) {
-      setGradeForm((prev) => ({ ...prev, courseId }))
-    } else {
-      setEnrollmentForm((prev) => ({ ...prev, courseId }))
-    }
+    setEnrollmentForm((prev) => ({ ...prev, courseId }))
     setErrors({})
     setSubmitError('')
   }
@@ -75,68 +68,8 @@ function FormPage({
     }
 
     const course = courses.find((item) => item.id === enrollmentForm.courseId)
-    const alreadyEnrolled = enrollments.some(
-      (enrollment) =>
-        enrollment.studentId === user.studentId &&
-        enrollment.courseCode === course.code &&
-        enrollment.term === enrollmentForm.term,
-    )
-
-    if (alreadyEnrolled) {
-      nextErrors.courseId =
-        'You are already enrolled in this course for this term.'
-    } else if (course.enrolled >= course.capacity) {
-      nextErrors.courseId = 'This course is already full.'
-    }
-
-    setErrors(nextErrors)
-    return Object.keys(nextErrors).length === 0
-  }
-
-  function validateGrade() {
-    const nextErrors = {}
-
-    if (!gradeForm.studentId) {
-      nextErrors.studentId = 'Select a student.'
-    }
-    if (!gradeForm.courseId) {
-      nextErrors.courseId = 'Select a course.'
-    }
-
-    const score = Number(gradeForm.score)
-    if (gradeForm.score === '') {
-      nextErrors.score = 'Score is required.'
-    } else if (Number.isNaN(score) || score < 0 || score > 100) {
-      nextErrors.score = 'Score must be a number between 0 and 100.'
-    }
-
-    if (gradeForm.studentId && gradeForm.courseId) {
-      const student = students.find((item) => item.studentId === gradeForm.studentId)
-      const course = courses.find((item) => item.id === gradeForm.courseId)
-
-      const isEnrolled = enrollments.some(
-        (enrollment) =>
-          enrollment.studentId === student.studentId &&
-          enrollment.courseCode === course.code &&
-          enrollment.term === gradeForm.term &&
-          enrollment.status === 'approved',
-      )
-      if (!isEnrolled) {
-        nextErrors.courseId =
-          'This student is not enrolled in the selected course for this term.'
-      } else {
-        const duplicate = grades.some(
-          (grade) =>
-            grade.studentId === student.studentId &&
-            grade.courseCode === course.code &&
-            grade.term === gradeForm.term,
-        )
-        if (duplicate) {
-          nextErrors.courseId =
-            'A grade for this student and course already exists for this term.'
-        }
-      }
-    }
+    const block = course ? requestBlock(course) : 'missing'
+    if (block) nextErrors.courseId = blockMessages[block]
 
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
@@ -167,63 +100,8 @@ function FormPage({
     }
   }
 
-  async function handleGradeSubmit(event) {
-    event.preventDefault()
-    setSubmitError('')
-    if (!validateGrade()) {
-      return
-    }
-    setIsSubmitting(true)
-    try {
-      const student = students.find((item) => item.studentId === gradeForm.studentId)
-      const course = courses.find((item) => item.id === gradeForm.courseId)
-      const score = Number(gradeForm.score)
-      // Find the approved enrollment ID required by POST /api/grades
-      const matchingEnrollment = enrollments.find(
-        (enrollment) =>
-          enrollment.studentId === student.studentId &&
-          enrollment.courseCode === course.code &&
-          enrollment.term === gradeForm.term &&
-          enrollment.status === 'approved',
-      )
-      const savedGrade = await onAddGrade({
-        enrollmentId: matchingEnrollment.id,
-        score,
-      })
-      navigate('/output', {
-        state: {
-          success: `Grade ${savedGrade.letter} (${savedGrade.points.toFixed(1)} pts) recorded for ${student.name} in ${course.code}.`,
-        },
-      })
-    } catch (error) {
-      setSubmitError(
-        error.message ||
-          'Unable to record grade. Check your connection and try again.',
-      )
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const scorePreview =
-    gradeForm.score !== '' && !Number.isNaN(Number(gradeForm.score))
-      ? toLetterGrade(Number(gradeForm.score))
-      : null
-
-  const gradeableCourses = gradeForm.studentId
-    ? courses.filter((course) =>
-        enrollments.some(
-          (enrollment) =>
-            enrollment.studentId === gradeForm.studentId &&
-            enrollment.courseCode === course.code &&
-            enrollment.term === gradeForm.term &&
-            enrollment.status === 'approved',
-        ),
-      )
-    : []
-
   // Selected course object for real-time preview
-  const selectedCourseId = isAdministrator ? gradeForm.courseId : enrollmentForm.courseId
+  const selectedCourseId = enrollmentForm.courseId
   const selectedCourse = courses.find((c) => c.id === selectedCourseId)
 
   // Filtered course catalog
@@ -238,18 +116,10 @@ function FormPage({
     )
   }, [courses, searchQuery])
 
-  // Administrator: approved enrollments without a grade, oldest first (the grading to-do list).
-  const gradedEnrollmentIds = new Set(grades.map((g) => g.enrollmentId))
-  const ungradedEnrollments = isAdministrator
-    ? enrollments
-      .filter((e) => e.status === 'approved' && !gradedEnrollmentIds.has(e.id))
-      .sort((a, b) => String(a.enrolledAt).localeCompare(String(b.enrolledAt)))
-    : []
-
   // Student side: the API already returns only this student's enrollments.
   const myEnrollments = useMemo(
-    () => (isAdministrator ? [] : enrollments.filter((e) => e.studentId === user.studentId)),
-    [enrollments, isAdministrator, user.studentId],
+    () => enrollments.filter((e) => e.studentId === user.studentId),
+    [enrollments, user.studentId],
   )
   const myStatusByCourse = useMemo(() => {
     const map = new Map()
@@ -266,19 +136,26 @@ function FormPage({
     .filter((e) => e.status === 'approved')
     .reduce((sum, e) => sum + (e.credits || 0), 0)
 
-  // Approved courses are listed in "My Enrollments", so the catalog leaves them out.
-  // Order: open courses first, then pending, rejected and full ones (same rule as the phone app).
-  function catalogState(course) {
+  // Why a course cannot be requested right now, or null. A rejected request may be made again.
+  function requestBlock(course) {
     const status = myStatusByCourse.get(course.id)
-    if (status) return status === 'approved' ? 'approved' : 'requested'
-    return course.enrolled >= course.capacity ? 'full' : 'open'
+    if (status === 'pending' || status === 'approved') return status
+    if (course.isOpen === false) return 'closed'
+    if (course.enrolled >= course.capacity) return 'full'
+    return null
+  }
+
+  // Approved courses are listed in "My Enrollments", so the catalog leaves them out.
+  // Order: open courses first, then pending, then full and closed ones.
+  function catalogState(course) {
+    const block = requestBlock(course)
+    if (block === 'approved') return 'approved'
+    if (block === 'pending') return 'requested'
+    return block || 'open'
   }
   function catalogRank(course) {
-    const status = myStatusByCourse.get(course.id)
-    if (status === 'pending') return 1
-    if (status === 'rejected') return 2
-    if (course.enrolled >= course.capacity) return 3
-    return 0
+    const state = catalogState(course)
+    return state === 'open' ? 0 : state === 'requested' ? 1 : 2
   }
   const catalogBase = filteredCourses
     .filter((c) => catalogState(c) !== 'approved')
@@ -288,6 +165,7 @@ function FormPage({
     All: catalogBase.length,
     Open: catalogBase.filter((c) => catalogState(c) === 'open').length,
     Full: catalogBase.filter((c) => catalogState(c) === 'full').length,
+    Closed: catalogBase.filter((c) => catalogState(c) === 'closed').length,
     Requested: catalogBase.filter((c) => catalogState(c) === 'requested').length,
   }
   const visibleCatalog = catalogFilter === 'All'
@@ -313,7 +191,7 @@ function FormPage({
   return (
     <>
       {/* Modern Royal Navy Hero Header */}
-      <section className={`hero-card ${isAdministrator ? 'hero-card--admin' : ''}`}>
+      <section className="hero-card">
         <div className="hero-card__deco1" />
         <div className="hero-card__deco2" />
 
@@ -321,9 +199,9 @@ function FormPage({
           <div className="hero-card__top">
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="hero-badge">
-                {isAdministrator ? 'Registrar Operations' : 'Course Enrollment'}
+                Course Enrollment
               </span>
-              <span className="term-tag">Term 2024/2025</span>
+              {currentTerm ? <span className="term-tag">Term {currentTerm}</span> : null}
             </div>
             <div className="hero-quick-pill">
               <span className="hero-quick-pill__item">
@@ -331,7 +209,8 @@ function FormPage({
                   <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
                   <path d="M6 12v5c3 3 9 3 12 0v-5" />
                 </svg>
-                <span>{isAdministrator ? 'Grading System' : 'Max 24 SKS'}</span>
+                {/* No credit limit exists in the API, so show the real approved total instead. */}
+                <span>{approvedCredits} SKS approved</span>
               </span>
               <div className="hero-quick-pill__divider" />
               <span className="hero-quick-pill__item">
@@ -345,12 +224,10 @@ function FormPage({
           </div>
 
           <h1 className="hero-title" style={{ fontSize: '26px' }}>
-            {isAdministrator ? 'Record Academic Grades' : 'Course Enrollment Center'}
+            Course Enrollment Center
           </h1>
           <p className="hero-subtitle">
-            {isAdministrator
-              ? 'Enter raw scores for approved student enrollments. Letter grades and credit-weighted points calculate instantly.'
-              : 'Select courses from the official university catalog to register for the upcoming academic term.'}
+            Select courses from the university catalog and send a request to the registrar.
           </p>
         </div>
       </section>
@@ -361,37 +238,6 @@ function FormPage({
         </p>
       ) : null}
 
-      {isAdministrator && ungradedEnrollments.length > 0 ? (
-        <section className="ungraded-card" role="status">
-          <div className="ungraded-card__head">
-            <strong>
-              {ungradedEnrollments.length} approved {ungradedEnrollments.length === 1 ? 'enrollment has' : 'enrollments have'} no grade yet
-            </strong>
-            <span>Oldest first. Click Grade to fill the form.</span>
-          </div>
-          <ul className="ungraded-card__list">
-            {ungradedEnrollments.map((e) => (
-              <li key={e.id}>
-                <span className="ungraded-card__who">{e.studentName} · {e.studentId}</span>
-                <span className="ungraded-card__what">{e.courseCode} {e.courseTitle} · Term {e.term}</span>
-                <button
-                  type="button"
-                  className="btn btn--small btn--outline"
-                  onClick={() => {
-                    setGradeForm({ studentId: e.studentId, courseId: e.courseId, score: '', term: e.term })
-                    setErrors({})
-                    setSubmitError('')
-                    document.getElementById('score')?.focus()
-                  }}
-                >
-                  Grade
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       {/* Modern 2-Column Responsive Enrollment Layout */}
       <div className="enrollment-layout">
         {/* Left Column: The Form Card */}
@@ -399,135 +245,14 @@ function FormPage({
           <div className="section-head">
             <div>
               <h2 className="section-head__title">
-                {isAdministrator ? 'Grade Entry Form' : 'Enrollment Application'}
+                Enrollment Application
               </h2>
               <p className="table__muted" style={{ fontSize: '13px', marginTop: '2px' }}>
-                {isAdministrator
-                  ? 'Assign grades to approved students.'
-                  : 'Submit course registration for semester verification.'}
+                Submit course registration for semester verification.
               </p>
             </div>
           </div>
 
-          {isAdministrator ? (
-            <form onSubmit={handleGradeSubmit} noValidate style={{ marginTop: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div className="field">
-                  <label htmlFor="studentId">Select Student</label>
-                  <select
-                    id="studentId"
-                    name="studentId"
-                    value={gradeForm.studentId}
-                    onChange={handleGradeChange}
-                  >
-                    <option value="">Choose a student…</option>
-                    {students.map((student) => (
-                      <option key={student.id} value={student.studentId}>
-                        {student.name} ({student.studentId})
-                      </option>
-                    ))}
-                  </select>
-                  {errors.studentId ? (
-                    <span className="field__error">{errors.studentId}</span>
-                  ) : null}
-                </div>
-
-                <div className="field">
-                  <label htmlFor="gradeCourseId">Select Course</label>
-                  <select
-                    id="gradeCourseId"
-                    name="courseId"
-                    value={gradeForm.courseId}
-                    onChange={handleGradeChange}
-                    disabled={!gradeForm.studentId || gradeableCourses.length === 0}
-                  >
-                    <option value="">Choose course…</option>
-                    {gradeableCourses.map((course) => {
-                      const existingGrade = grades.find(
-                        (g) =>
-                          g.studentId === gradeForm.studentId &&
-                          g.courseCode === course.code &&
-                          g.term === gradeForm.term,
-                      )
-                      return (
-                        <option
-                          key={course.id}
-                          value={course.id}
-                          disabled={Boolean(existingGrade)}
-                        >
-                          {course.code} — {course.title} ({course.credits} SKS)
-                          {existingGrade
-                            ? ` (Graded: ${existingGrade.letter} / ${existingGrade.score} pts)`
-                            : ''}
-                        </option>
-                      )
-                    })}
-                  </select>
-                  {!gradeForm.studentId ? (
-                    <span className="field__hint">
-                      Select a student first to see approved courses.
-                    </span>
-                  ) : gradeableCourses.length === 0 ? (
-                    <span className="field__hint">
-                      This student has no approved courses for this term.
-                    </span>
-                  ) : null}
-                  {errors.courseId ? (
-                    <span className="field__error">{errors.courseId}</span>
-                  ) : null}
-                </div>
-
-                <div className="field">
-                  <label htmlFor="score">Raw Score (0–100)</label>
-                  <input
-                    id="score"
-                    name="score"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={gradeForm.score}
-                    onChange={handleGradeChange}
-                    placeholder="e.g. 88"
-                  />
-                  {errors.score ? (
-                    <span className="field__error">{errors.score}</span>
-                  ) : null}
-                  {scorePreview ? (
-                    <div style={{ marginTop: '6px' }}>
-                      <span className={`grade-badge-chip grade-badge-chip--${scorePreview.letter[0].toLowerCase()}`}>
-                        {scorePreview.letter} · {scorePreview.points.toFixed(1)} points
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="field">
-                  <label htmlFor="gradeTerm">Academic Term</label>
-                  <select
-                    id="gradeTerm"
-                    name="term"
-                    value={gradeForm.term}
-                    onChange={handleGradeChange}
-                  >
-                    {TERMS.map((term) => (
-                      <option key={term} value={term}>
-                        {term}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn--primary"
-                disabled={isSubmitting}
-                style={{ width: '100%', marginTop: '20px' }}
-              >
-                {isSubmitting ? 'Recording Grade…' : 'Record Grade in Database'}
-              </button>
-            </form>
-          ) : (
             <form onSubmit={handleEnrollmentSubmit} noValidate style={{ marginTop: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="field">
@@ -540,21 +265,16 @@ function FormPage({
                   >
                     <option value="">Choose a course or click below…</option>
                     {courses.map((course) => {
-                      const existing = myStatusByCourse.get(course.id)
-                      const isAlreadyEnrolled = Boolean(existing)
-                      const isFull = course.enrolled >= course.capacity
+                      const block = requestBlock(course)
+                      const wasRejected = myStatusByCourse.get(course.id) === 'rejected'
                       return (
                         <option
                           key={course.id}
                           value={course.id}
-                          disabled={isAlreadyEnrolled || isFull}
+                          disabled={Boolean(block)}
                         >
-                          {course.code} — {course.title} ({course.credits} SKS)
-                          {isAlreadyEnrolled
-                            ? ` — ${existing === 'pending' ? 'Request pending' : existing === 'approved' ? 'Already enrolled' : 'Rejected'}`
-                            : isFull
-                            ? ' — Class Full'
-                            : ''}
+                          {course.code} — {course.title} · {course.term} ({course.credits} SKS)
+                          {block ? ` — ${blockLabels[block]}` : wasRejected ? ' — Rejected before, can request again' : ''}
                         </option>
                       )
                     })}
@@ -611,18 +331,12 @@ function FormPage({
 
                 <div className="field">
                   <label htmlFor="enrollTerm">Academic Term</label>
-                  <select
+                  {/* The term belongs to the course offering; the student cannot pick another one. */}
+                  <input
                     id="enrollTerm"
-                    name="term"
-                    value={enrollmentForm.term}
-                    onChange={handleEnrollmentChange}
-                  >
-                    {TERMS.map((term) => (
-                      <option key={term} value={term}>
-                        {term} (Current Regular Term)
-                      </option>
-                    ))}
-                  </select>
+                    readOnly
+                    value={selectedCourse ? selectedCourse.term : 'Set by the course you choose'}
+                  />
                 </div>
               </div>
 
@@ -644,11 +358,9 @@ function FormPage({
                 )}
               </button>
             </form>
-          )}
         </section>
 
-        {!isAdministrator ? (
-          <section className="card">
+        <section className="card">
             <div className="section-head">
               <div>
                 <h2 className="section-head__title">My Enrollments</h2>
@@ -686,183 +398,9 @@ function FormPage({
               emptyMessage="Pick a course from the catalog below and submit the form."
             />
           </section>
-        ) : null}
-
-        {/* Right Column (administrator): Interactive Course Catalog Card */}
-        {isAdministrator ? (
-        <section className="card">
-          <div className="section-head">
-            <div>
-              <h2 className="section-head__title">Course Catalog & Capacity</h2>
-              <p className="table__muted" style={{ fontSize: '13px', marginTop: '2px' }}>
-                Browse live availability. Click "Select" to fill the form.
-              </p>
-            </div>
-            <span className="section-head__count">{filteredCourses.length} offerings</span>
-          </div>
-
-          {/* Quick Search Bar */}
-          <div className="catalog-search-wrap">
-            <div className="catalog-search-input">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true" style={{ color: 'var(--color-text-muted)' }}>
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by code, title, or instructor…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', padding: 0 }}
-                  title="Clear search"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Upgraded Table with Seat Progress Bar & Direct Selection */}
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Course</th>
-                  <th scope="col">Credits</th>
-                  <th scope="col">Instructor</th>
-                  <th scope="col">Capacity</th>
-                  <th scope="col" style={{ textAlign: 'right' }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCourses.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-muted)' }}>
-                      <p style={{ margin: '0 0 8px', fontWeight: 600, color: 'var(--color-text)' }}>
-                        {searchQuery ? `No courses found matching "${searchQuery}"` : 'No courses available for this semester.'}
-                      </p>
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          className="btn btn--small btn--outline"
-                          onClick={() => setSearchQuery('')}
-                        >
-                          Clear search
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredCourses.map((c) => {
-                    const pct = Math.min(100, Math.round((c.enrolled / c.capacity) * 100))
-                    const isSelected = selectedCourseId === c.id
-                    const isFull = c.enrolled >= c.capacity
-                    const isAlreadyEnrolled = !isAdministrator && enrollments.some(
-                      (e) =>
-                        e.studentId === user.studentId &&
-                        e.courseCode === c.code &&
-                        e.term === enrollmentForm.term,
-                    )
-
-                    return (
-                      <tr key={c.id} style={isSelected ? { backgroundColor: 'var(--color-primary-soft)' } : undefined}>
-                        <td>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span className="table__strong" style={{ fontFamily: 'var(--font-mono)' }}>{c.code}</span>
-                            <span className="table__muted">{c.title}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 600 }}>{c.credits} SKS</span>
-                        </td>
-                        <td>
-                          <span style={{ fontSize: '13px', color: 'var(--color-text)' }}>{c.instructor}</span>
-                        </td>
-                        <td style={{ minWidth: '130px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: isFull ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
-                              {c.enrolled} / {c.capacity} seats ({pct}%)
-                            </span>
-                            <div className="capacity-track">
-                              <div
-                                className="capacity-bar-fill"
-                                style={{
-                                  width: `${pct}%`,
-                                  background: isFull
-                                    ? 'var(--color-danger)'
-                                    : pct > 80
-                                    ? 'var(--color-warning)'
-                                    : 'var(--color-primary)',
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          {isAlreadyEnrolled ? (
-                            <button
-                              type="button"
-                              className="btn-select-row btn-select-row--enrolled"
-                              disabled
-                              title="You are already enrolled in this course for this term"
-                              aria-label={`Already enrolled in ${c.code}`}
-                            >
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="12" height="12" aria-hidden="true">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                              <span>Enrolled</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className={`btn-select-row ${isSelected ? 'btn-select-row--active' : ''}`}
-                              onClick={() => selectCourse(c.id)}
-                              disabled={isFull && !isAdministrator}
-                              title={isFull ? 'Course is full' : 'Select for registration'}
-                              aria-label={
-                                isSelected
-                                  ? `Selected ${c.code} for registration`
-                                  : isFull
-                                  ? `${c.code} is full`
-                                  : `Select ${c.code} for registration`
-                              }
-                            >
-                              {isSelected ? (
-                                <>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" width="12" height="12" aria-hidden="true">
-                                    <polyline points="20 6 9 17 4 12" />
-                                  </svg>
-                                  <span>Selected</span>
-                                </>
-                              ) : isFull ? (
-                                <span>Full</span>
-                              ) : (
-                                <span>Select</span>
-                              )}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        ) : null}
       </div>
 
-      {!isAdministrator ? (
-        <section className="card card--spaced">
+      <section className="card card--spaced">
           <div className="section-head">
             <div>
               <h2 className="section-head__title">Course Catalog &amp; Capacity</h2>
@@ -923,7 +461,7 @@ function FormPage({
                 return (
                   <article
                     key={c.id}
-                    className={`catalog-card ${isSelected ? 'catalog-card--selected' : ''} ${state === 'full' ? 'catalog-card--full' : ''}`}
+                    className={`catalog-card ${isSelected ? 'catalog-card--selected' : ''} ${state === 'full' || state === 'closed' ? 'catalog-card--full' : ''}`}
                   >
                     <div className="catalog-card__top">
                       <span className="code-pill">{c.code}</span>
@@ -952,10 +490,15 @@ function FormPage({
                       </div>
                     </div>
                     <div className="catalog-card__action">
-                      {status ? (
+                      {state === 'requested' ? (
                         <>
                           <span className="catalog-card__note">Your request</span>
                           <StatusBadge status={status} />
+                        </>
+                      ) : state === 'closed' ? (
+                        <>
+                          <span className="catalog-card__note">Closed for enrollment</span>
+                          <button type="button" className="btn-select-row" disabled>Closed</button>
                         </>
                       ) : state === 'full' ? (
                         <>
@@ -964,7 +507,10 @@ function FormPage({
                         </>
                       ) : (
                         <>
-                          <span className="catalog-card__note">{isSelected ? 'Filled into the form above' : 'Open for enrollment'}</span>
+                          <span className="catalog-card__note">
+                            {isSelected ? 'Filled into the form above'
+                              : status === 'rejected' ? 'Rejected before · you can request again' : 'Open for enrollment'}
+                          </span>
                           <button
                             type="button"
                             className={`btn-select-row ${isSelected ? 'btn-select-row--active' : ''}`}
@@ -985,7 +531,6 @@ function FormPage({
             </div>
           )}
         </section>
-      ) : null}
 
       <StudentDetailModal
         key={selectedRecord?.id ?? 'none'}
@@ -993,7 +538,7 @@ function FormPage({
         onClose={() => setSelectedRecord(null)}
         courses={courses}
         grades={grades}
-        onWithdraw={isAdministrator ? undefined : onWithdrawEnrollment}
+        onWithdraw={onWithdrawEnrollment}
       />
     </>
   )

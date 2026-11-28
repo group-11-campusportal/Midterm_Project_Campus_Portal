@@ -42,8 +42,8 @@ export default function EnrollScreen() {
   const courses = coursesState.items
   const enrollments = enrollmentsState.items
 
-  // The API refuses a second request for the same course, so a row that exists already
-  // (pending, approved or rejected) is shown as a status, not as something to tap.
+  // A pending or approved request blocks a new one; after a rejection the student may ask again
+  // (the API reopens the same row as pending).
   const existingByCourse = useMemo(() => {
     const map = new Map()
     for (const enrollment of enrollments ?? []) map.set(enrollment.courseId, enrollment.status)
@@ -58,8 +58,8 @@ export default function EnrollScreen() {
     if (existing === 'pending') {
       return { label: 'Requested', reason: 'you already have a pending request for this course' }
     }
-    if (existing === 'rejected') {
-      return { label: 'Rejected', reason: 'your request for this course was rejected — ask the registrar' }
+    if (course.isOpen === false) {
+      return { label: 'Closed', reason: 'this course is closed for enrollment' }
     }
     if (course.enrolled >= course.capacity) {
       return { label: 'Full', reason: 'this course is full' }
