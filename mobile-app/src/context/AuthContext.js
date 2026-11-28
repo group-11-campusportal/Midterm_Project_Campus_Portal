@@ -1,20 +1,24 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api, onUnauthorized, setApiToken } from '../lib/api'
-import { clearToken, loadToken, saveToken } from '../lib/session'
+import { clearToken, loadToken, loadUser, saveToken, saveUser } from '../lib/session'
 
 const AuthContext = createContext(null)
 
-// status: 'loading' while the stored token is checked, then 'signedIn' or 'signedOut'.
+// status: 'loading' while the stored token is checked, then 'signedIn' or 'signedOut', or
+// 'offline' when the server cannot be reached and no saved profile exists (retry with `retry`).
 export function AuthProvider({ children }) {
   const [status, setStatus] = useState('loading')
   const [user, setUser] = useState(null)
   const [gpa, setGpa] = useState(null)
+  // Number of graded courses; 0 means "no grades yet" even though the API reports gpa 0.
+  const [gradedCount, setGradedCount] = useState(null)
 
   const clearSession = useCallback(async () => {
     setApiToken(null)
     await clearToken()
     setUser(null)
     setGpa(null)
+    setGradedCount(null)
     setStatus('signedOut')
   }, [])
 
@@ -22,44 +26,63 @@ export function AuthProvider({ children }) {
   useEffect(() => onUnauthorized(() => { clearSession() }), [clearSession])
 
   // On app start, reuse a stored token only if the server still accepts it.
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      const token = await loadToken()
-      if (!token) {
-        if (!cancelled) setStatus('signedOut')
+  const restore = useCallback(async (token, isCancelled = () => false) => {
+    if (!token) {
+      if (!isCancelled()) setStatus('signedOut')
+      return
+    }
+    setApiToken(token)
+    try {
+      const me = await api.me()
+      if (isCancelled()) return
+      setUser(me.user)
+      setGpa(me.gpa ?? null)
+      setGradedCount(me.gradedCount ?? null)
+      saveUser(me.user)
+      setStatus('signedIn')
+    } catch (error) {
+      if (isCancelled()) return
+      if (error.status === 401) {
+        await clearSession()
         return
       }
-      setApiToken(token)
-      try {
-        const me = await api.me()
-        if (cancelled) return
-        setUser(me.user)
-        setGpa(me.gpa ?? null)
+      // Offline or server asleep: keep the token. With the saved profile the app opens with the
+      // right role (screens show their own retry); without one, ask to retry instead of guessing.
+      const saved = await loadUser()
+      if (isCancelled()) return
+      if (saved) {
+        setUser(saved)
         setStatus('signedIn')
-      } catch (error) {
-        if (cancelled) return
-        if (error.status === 401) {
-          await clearSession()
-        } else {
-          // Offline or server asleep: keep the token, show the app, screens will show the error.
-          setStatus('signedIn')
-        }
+      } else {
+        setStatus('offline')
       }
-    })()
-    return () => { cancelled = true }
+    }
   }, [clearSession])
+
+  useEffect(() => {
+    let cancelled = false
+    loadToken().then((token) => restore(token, () => cancelled))
+    return () => { cancelled = true }
+  }, [restore])
+
+  const retry = useCallback(() => {
+    setStatus('loading')
+    loadToken().then((token) => restore(token))
+  }, [restore])
 
   const signIn = useCallback(async (username, password) => {
     const result = await api.login(username, password)
     await saveToken(result.token)
+    await saveUser(result.user)
     setApiToken(result.token)
     setUser(result.user)
     try {
       const me = await api.me()
       setGpa(me.gpa ?? null)
+      setGradedCount(me.gradedCount ?? null)
     } catch {
       setGpa(null)
+      setGradedCount(null)
     }
     setStatus('signedIn')
   }, [])
@@ -68,11 +91,13 @@ export function AuthProvider({ children }) {
     const me = await api.me()
     setUser(me.user)
     setGpa(me.gpa ?? null)
+    setGradedCount(me.gradedCount ?? null)
+    saveUser(me.user)
   }, [])
 
   const value = useMemo(
-    () => ({ status, user, gpa, signIn, signOut: clearSession, clearSession, refreshMe }),
-    [status, user, gpa, signIn, clearSession, refreshMe],
+    () => ({ status, user, gpa, gradedCount, signIn, signOut: clearSession, clearSession, refreshMe, retry }),
+    [status, user, gpa, gradedCount, signIn, clearSession, refreshMe, retry],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

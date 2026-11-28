@@ -185,13 +185,13 @@ export async function recommendationFacts(db, user) {
       FROM enrollments e JOIN courses c ON c.id = e.course_id
       LEFT JOIN grades g ON g.enrollment_id = e.id WHERE e.student_id = ? ORDER BY c.code`, [user.id])
   const graded = history.filter((row) => row.score !== null).map((row) => ({ ...row, ...gradeForScore(row.score) }))
-  // A course offering the student already requested cannot be requested again (UNIQUE), and a
-  // course code they passed or are taking should not be suggested again in another term.
-  const takenIds = new Set(history.map((row) => row.courseId))
+  // A course code the student passed, is taking or has pending is not suggested again in any term.
+  // A rejected request may be made again, so a rejected offering stays a candidate.
+  const takenIds = new Set(history.filter((row) => row.status !== 'rejected').map((row) => row.courseId))
   const takenCodes = new Set(history.filter((row) => row.status !== 'rejected').map((row) => row.code))
   const courses = await db.all(`SELECT c.id, c.code, c.title, c.credits, c.term, c.instructor, c.capacity,
       (SELECT count(*) FROM enrollments e WHERE e.course_id = c.id AND e.status = 'approved') AS enrolled
-      FROM courses c ORDER BY c.code, c.term`)
+      FROM courses c WHERE c.is_open = 1 ORDER BY c.code, c.term`)
   const candidates = courses
     .filter((course) => !takenIds.has(course.id) && !takenCodes.has(course.code) && course.enrolled < course.capacity)
     .map(({ id, code, title, credits, term, instructor }) => ({ courseId: id, code, title, credits, term, instructor }))

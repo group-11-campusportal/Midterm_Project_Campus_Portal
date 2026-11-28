@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import MainLayout from './layouts/MainLayout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -17,6 +17,8 @@ import { apiFetch, clearToken, getToken } from './lib/api'
 function App() {
   const [currentUser, setCurrentUser] = useState(null)
   const [authReady, setAuthReady] = useState(() => !getToken())
+  // Set when the stored session could not be checked (network, cold start): the token is kept.
+  const [restoreError, setRestoreError] = useState('')
   const [isDataLoading, setIsDataLoading] = useState(false)
   const [dataError, setDataError] = useState(null)
 
@@ -25,7 +27,12 @@ function App() {
   const [grades, setGrades] = useState([])
   const [students, setStudents] = useState([])
 
+  // Each load gets a number; an answer from an older load (or from before a logout) is ignored,
+  // so a slow response can never show the previous account's data.
+  const loadId = useRef(0)
+
   const handleLogout = useCallback(() => {
+    loadId.current += 1
     clearToken()
     setCurrentUser(null)
     setCourses([])
@@ -44,6 +51,8 @@ function App() {
   // Fetch all role-appropriate data from the API when logged in
   const loadPortalData = useCallback(async (user) => {
     if (!user) return
+    const id = ++loadId.current
+    const isCurrent = () => id === loadId.current
     setIsDataLoading(true)
     setDataError(null)
     try {
@@ -58,6 +67,7 @@ function App() {
 
       const [coursesRes, enrollmentsRes, gradesRes, studentsRes] =
         await Promise.all(requests)
+      if (!isCurrent()) return
 
       setCourses(coursesRes.data)
       setEnrollments(enrollmentsRes.data)
@@ -66,26 +76,44 @@ function App() {
         setStudents(studentsRes.data)
       }
     } catch (error) {
+      if (!isCurrent()) return
       console.error('Failed to load portal data:', error)
       setDataError(
         error.message || 'Unable to connect to academic portal records. Check your internet connection and try again.',
       )
     } finally {
-      setIsDataLoading(false)
+      if (isCurrent()) setIsDataLoading(false)
     }
   }, [])
 
-  // Restore session on page refresh if a token exists in localStorage
-  useEffect(() => {
-    if (!getToken()) return
+  // Restore session on page refresh if a token exists in localStorage.
+  // Only a 401 ends the session; a slow or unreachable server shows a retry screen instead.
+  const restoreSession = useCallback(() => {
     apiFetch('/api/auth/me')
       .then((res) => {
         setCurrentUser(res.user)
+        setAuthReady(true)
         return loadPortalData(res.user)
       })
-      .catch(() => clearToken())
-      .finally(() => setAuthReady(true))
+      .catch((error) => {
+        if (error.status === 401) {
+          clearToken()
+          setAuthReady(true)
+        } else {
+          setRestoreError(error.message || 'Cannot reach the server.')
+        }
+      })
   }, [loadPortalData])
+
+  useEffect(() => {
+    if (getToken()) restoreSession()
+  }, [restoreSession])
+
+  function signOutFromRestore() {
+    clearToken()
+    setRestoreError('')
+    setAuthReady(true)
+  }
 
   function handleLogin(user) {
     setCurrentUser(user)
@@ -98,12 +126,14 @@ function App() {
       method: 'POST',
       body: JSON.stringify({ courseId }),
     })
-    setEnrollments((previous) => [...previous, res.data])
+    // A rejected request that is made again comes back with the same id, so replace it.
+    setEnrollments((previous) => [...previous.filter((item) => item.id !== res.data.id), res.data])
     return res.data
   }
 
   // B4: Admin approves or rejects via PATCH /api/enrollments/:id/status
   async function updateEnrollmentStatus(enrollmentId, nextStatus) {
+    const wasApproved = enrollments.find((item) => item.id === enrollmentId)?.status === 'approved'
     const res = await apiFetch(`/api/enrollments/${enrollmentId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status: nextStatus }),
@@ -114,9 +144,18 @@ function App() {
       previous.map((item) => (item.id === enrollmentId ? updated : item)),
     )
 
-    // Refresh courses so the approved enrollment count stays accurate
-    const coursesRes = await apiFetch('/api/courses')
-    setCourses(coursesRes.data)
+    // Refresh courses so the approved enrollment count stays accurate. The decision is already
+    // saved, so a failed refresh must not be reported as a failed approval.
+    try {
+      const coursesRes = await apiFetch('/api/courses')
+      setCourses(coursesRes.data)
+    } catch (error) {
+      console.error('Course refresh after a status change failed:', error)
+      const seatChange = (updated.status === 'approved' ? 1 : 0) - (wasApproved ? 1 : 0)
+      setCourses((previous) => previous.map((course) => (course.id === updated.courseId
+        ? { ...course, enrolled: Math.max(0, course.enrolled + seatChange) }
+        : course)))
+    }
     return updated
   }
 
@@ -168,6 +207,20 @@ function App() {
   async function withdrawEnrollment(enrollmentId) {
     await apiFetch(`/api/enrollments/${enrollmentId}`, { method: 'DELETE' })
     setEnrollments((previous) => previous.filter((item) => item.id !== enrollmentId))
+  }
+
+  if (!authReady && restoreError) {
+    return (
+      <div className="content">
+        <div className="alert alert--error" role="alert">
+          <strong>Cannot check your session.</strong> {restoreError} You are still signed in.
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+          <button type="button" className="btn btn--primary" onClick={() => { setRestoreError(''); restoreSession() }}>Retry</button>
+          <button type="button" className="btn btn--ghost" onClick={signOutFromRestore}>Sign out</button>
+        </div>
+      </div>
+    )
   }
 
   if (!authReady) {
@@ -224,6 +277,7 @@ function App() {
                 <Enrollments
                   enrollments={enrollments}
                   courses={courses}
+                  grades={grades}
                   onUpdateEnrollmentStatus={updateEnrollmentStatus}
                 />
               </ProtectedRoute>
@@ -240,9 +294,7 @@ function App() {
                 courses={courses}
                 enrollments={enrollments}
                 grades={grades}
-                students={students}
                 onAddEnrollment={addEnrollment}
-                onAddGrade={addGrade}
                 onWithdrawEnrollment={withdrawEnrollment}
               />
             )
@@ -271,7 +323,7 @@ function App() {
             path="/ai-advisor"
             element={
               <ProtectedRoute user={currentUser} allowedRoles={['administrator']}>
-                <AiAdvisor courses={courses} />
+                <AiAdvisor courses={courses} isLoading={isDataLoading} />
               </ProtectedRoute>
             }
           />

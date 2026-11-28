@@ -9,7 +9,8 @@ try {
   db = await openDatabase(config.database)
   const advisor = createGeminiAdvisor(config.ai)
   const recommender = createGeminiRecommender(config.ai)
-  const app = createApp({ db, secret: config.secret, origin: config.origin, advisor, recommender })
+  const app = createApp({ db, secret: config.secret, origin: config.origin, advisor, recommender,
+    trustProxy: config.trustProxy })
   const server = app.listen(config.port, config.host, () => {
     console.log(`Campus Portal API running at http://${config.host}:${config.port}/api`)
     console.log(`Database: ${describeDatabase(config.database)}`)

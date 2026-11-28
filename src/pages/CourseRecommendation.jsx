@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../lib/api'
+import { AI_TIMEOUT_MS, apiFetch } from '../lib/api'
 
 const emptyForm = { careerGoal: '', interests: '', skills: '', workload: 'balanced' }
 
@@ -55,6 +55,7 @@ function CourseRecommendation() {
           skills: form.skills.trim(),
           workload: form.workload,
         }),
+        timeoutMs: AI_TIMEOUT_MS,
       })
       setResult(response.data)
     } catch (err) {

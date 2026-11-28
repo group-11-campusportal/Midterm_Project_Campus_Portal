@@ -32,3 +32,21 @@ export function computeGpa(gradeList) {
   )
   return totalPoints / totalCredits
 }
+
+// Parses a typed score: 0–100, comma or dot as decimal mark, at most 2 decimals (the API's rule).
+// Returns the number, or null when the text is not a valid score.
+export function parseScore(text) {
+  const trimmed = String(text ?? '').trim()
+  if (!/^\d{1,3}([.,]\d{1,2})?$/.test(trimmed)) return null
+  const value = Number(trimmed.replace(',', '.'))
+  return value >= 0 && value <= 100 ? value : null
+}
+
+// Standing label for a GPA. Plain descriptions of the number, not official university titles.
+export function gpaStanding(gpa, gradedCount) {
+  if (!gradedCount) return 'No grades recorded yet'
+  if (gpa >= 3.5) return 'Excellent Standing (GPA 3.50+)'
+  if (gpa >= 3.0) return 'Good Academic Standing'
+  if (gpa >= 2.0) return 'Satisfactory Standing'
+  return 'Below 2.00 · talk to your academic advisor'
+}

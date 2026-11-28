@@ -111,7 +111,7 @@ function Login({ onLogin }) {
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </span>
-              <span>Credit-Weighted GPA Calculation &amp; Honors</span>
+              <span>Credit-Weighted GPA Calculation</span>
             </div>
           </div>
         </div>

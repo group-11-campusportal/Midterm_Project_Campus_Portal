@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { toLetterGrade } from '../utils/grade'
+import { parseScore, toLetterGrade } from '../utils/grade'
 
 /**
  * Administrator: change or delete one recorded grade.
@@ -21,8 +21,9 @@ function EditGradeModal({ grade, onClose, onSave, onDelete }) {
 
   if (!grade) return null
 
-  const value = Number(score)
-  const valid = score.trim() !== '' && Number.isFinite(value) && value >= 0 && value <= 100
+  // Same parser as Record Grade: "85,5" and "85.5" both work.
+  const value = parseScore(score)
+  const valid = value !== null
   const preview = valid ? toLetterGrade(value) : null
 
   async function run(action) {
@@ -41,7 +42,7 @@ function EditGradeModal({ grade, onClose, onSave, onDelete }) {
   function handleSubmit(event) {
     event.preventDefault()
     if (!valid) {
-      setError('Score must be a number between 0 and 100.')
+      setError('Score must be a number from 0 to 100, with at most 2 decimals.')
       return
     }
     run(() => onSave(grade.id, value))
@@ -90,10 +91,9 @@ function EditGradeModal({ grade, onClose, onSave, onDelete }) {
             <label htmlFor="edit-score">Raw Score (0–100)</label>
             <input
               id="edit-score"
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
+              type="text"
+              inputMode="decimal"
+              maxLength={6}
               value={score}
               onChange={(event) => { setScore(event.target.value); setError('') }}
               autoFocus

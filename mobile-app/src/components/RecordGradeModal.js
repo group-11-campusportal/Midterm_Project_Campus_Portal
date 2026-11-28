@@ -122,7 +122,7 @@ export default function RecordGradeModal({ visible, onClose, enrollments, grades
     if (!studentId) next.student = 'Select a student.'
     else if (!enrollmentId) next.course = 'Select an approved course.'
     if (scoreText.trim() === '') next.score = 'Score is required.'
-    else if (score === null) next.score = 'Score must be a number between 0 and 100.'
+    else if (score === null) next.score = 'Score must be a number from 0 to 100, with at most 2 decimals.'
     setErrors(next)
     return Object.keys(next).length === 0
   }

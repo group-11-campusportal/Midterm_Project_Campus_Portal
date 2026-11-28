@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import { api } from '../lib/api'
 import { colors, font, minTap, spacing } from '../theme'
 import BottomSheet, { SheetField, SheetMessage, sheetInput } from './BottomSheet'
@@ -25,12 +25,13 @@ function validate(form) {
 }
 
 // Administrator: add, edit or delete a course offering (POST / PUT / DELETE /api/courses).
-export default function CourseFormSheet({ course, onClose, onChanged }) {
+// defaultTerm: the newest term in the catalog, pre-filled for a new course.
+export default function CourseFormSheet({ course, defaultTerm = '', onClose, onChanged }) {
   const isEdit = Boolean(course?.id)
   const [form, setForm] = useState(() => (isEdit
     ? { code: course.code, title: course.title, credits: String(course.credits), term: course.term,
-        instructor: course.instructor, capacity: String(course.capacity) }
-    : { code: '', title: '', credits: '3', term: '2024/2025', instructor: '', capacity: '30' }))
+        instructor: course.instructor, capacity: String(course.capacity), isOpen: course.isOpen !== false }
+    : { code: '', title: '', credits: '3', term: defaultTerm, instructor: '', capacity: '30', isOpen: true }))
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -63,6 +64,7 @@ export default function CourseFormSheet({ course, onClose, onChanged }) {
     const input = {
       code: form.code.trim(), title: form.title.trim(), credits: Number(form.credits),
       term: form.term.trim(), instructor: form.instructor.trim(), capacity: Number(form.capacity),
+      isOpen: form.isOpen,
     }
     run(
       () => (isEdit ? api.updateCourse(course.id, input) : api.createCourse(input)),
@@ -104,7 +106,7 @@ export default function CourseFormSheet({ course, onClose, onChanged }) {
           <SheetField label="Course code" error={errors.code}>{input('code', { placeholder: 'CS320', autoCapitalize: 'characters', maxLength: 30 })}</SheetField>
         </View>
         <View style={styles.col}>
-          <SheetField label="Term" error={errors.term}>{input('term', { placeholder: '2024/2025', maxLength: 40 })}</SheetField>
+          <SheetField label="Term" error={errors.term}>{input('term', { placeholder: 'e.g. 2025/2026', maxLength: 40 })}</SheetField>
         </View>
       </View>
       <SheetField label="Title" error={errors.title}>{input('title', { placeholder: 'Mobile Application Development', maxLength: 200 })}</SheetField>
@@ -117,8 +119,20 @@ export default function CourseFormSheet({ course, onClose, onChanged }) {
           <SheetField label="Capacity" error={errors.capacity}>{input('capacity', { keyboardType: 'number-pad', maxLength: 4 })}</SheetField>
         </View>
       </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Open for enrollment</Text>
+        <Switch
+          value={form.isOpen}
+          onValueChange={set('isOpen')}
+          accessibilityLabel="Open for enrollment"
+          trackColor={{ true: colors.primary }}
+        />
+      </View>
       {isEdit ? (
-        <Text style={styles.note}>Code and term cannot change once a student has enrolled. Capacity cannot go below the approved count.</Text>
+        <Text style={styles.note}>
+          Code and term cannot change once a student has enrolled, and credits cannot change once a grade is
+          recorded. Capacity cannot go below the approved count.
+        </Text>
       ) : null}
       {confirmDelete ? (
         <SheetMessage tone="warning">Delete {course.code}? This only works while no student has an enrollment for it.</SheetMessage>
@@ -132,6 +146,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm },
   col: { flex: 1 },
   note: { fontSize: 12, color: colors.muted },
+  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: minTap },
+  switchLabel: { fontSize: font.body, fontWeight: '600', color: colors.text },
   deleteLink: { minHeight: minTap - 8, alignItems: 'center', justifyContent: 'center' },
   deleteText: { fontSize: font.body, fontWeight: '700', color: colors.danger },
 })

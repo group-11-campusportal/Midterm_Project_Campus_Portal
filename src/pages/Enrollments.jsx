@@ -13,8 +13,9 @@ function age(dateText) {
 
 // Administrator "University Enrollments" page. Same layout as the mobile Enrollments tab
 // (mobile-app/src/app/(tabs)/enrollments.js): decision banner, status filters, one card per request
-// with seat count and Approve / Reject. Approve and reject cannot be undone, so each asks once inline.
-function Enrollments({ enrollments, courses, onUpdateEnrollmentStatus }) {
+// with seat count and Approve / Reject. Each decision asks once inline. An approval can be undone
+// (changed to rejected) only while the enrollment has no grade; a rejected student may request again.
+function Enrollments({ enrollments, courses, grades = [], onUpdateEnrollmentStatus }) {
   const [activeFilter, setActiveFilter] = useState('All')
   const [confirming, setConfirming] = useState(null) // { id, status }
   const [busyId, setBusyId] = useState(null)
@@ -22,6 +23,7 @@ function Enrollments({ enrollments, courses, onUpdateEnrollmentStatus }) {
   const [notice, setNotice] = useState('')
 
   const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses])
+  const gradedIds = useMemo(() => new Set(grades.map((g) => g.enrollmentId)), [grades])
 
   const countFor = (filter) =>
     filter === 'All' ? enrollments.length : enrollments.filter((e) => e.status === filter.toLowerCase()).length
@@ -120,6 +122,7 @@ function Enrollments({ enrollments, courses, onUpdateEnrollmentStatus }) {
               key={item.id}
               item={item}
               course={courseById.get(item.courseId)}
+              graded={gradedIds.has(item.id)}
               busy={busyId === item.id}
               confirming={confirming?.id === item.id ? confirming.status : null}
               onAsk={(status) => { setError(''); setConfirming({ id: item.id, status }) }}
@@ -133,8 +136,9 @@ function Enrollments({ enrollments, courses, onUpdateEnrollmentStatus }) {
   )
 }
 
-function RequestCard({ item, course, busy, confirming, onAsk, onCancel, onConfirm }) {
+function RequestCard({ item, course, graded, busy, confirming, onAsk, onCancel, onConfirm }) {
   const isPending = item.status === 'pending'
+  const canUndo = item.status === 'approved' && !graded
   const seatsLeft = course ? Math.max(0, course.capacity - course.enrolled) : null
   const kind = isPending ? 'NEW REQUEST' : item.status === 'approved' ? 'APPROVED' : 'REJECTED'
   const sentence = isPending ? 'wants to enroll in ' : item.status === 'approved' ? 'is enrolled in ' : 'was refused for '
@@ -163,10 +167,16 @@ function RequestCard({ item, course, busy, confirming, onAsk, onCancel, onConfir
         ) : null}
       </ul>
 
-      {isPending ? (
+      {isPending || canUndo ? (
         confirming ? (
           <div className="en-confirm">
-            <span>{confirming === 'approved' ? 'Approve' : 'Reject'} this request? This cannot be undone.</span>
+            <span>
+              {!isPending
+                ? 'Undo this approval? The seat is freed and the request becomes rejected.'
+                : confirming === 'approved'
+                  ? 'Approve this request?'
+                  : 'Reject this request? The student can request this course again later.'}
+            </span>
             <div className="en-actions">
               <button type="button" className="btn btn--ghost" onClick={onCancel} disabled={busy}>Cancel</button>
               <button
@@ -175,9 +185,15 @@ function RequestCard({ item, course, busy, confirming, onAsk, onCancel, onConfir
                 onClick={() => onConfirm(confirming)}
                 disabled={busy}
               >
-                {busy ? 'Saving…' : `Yes, ${confirming === 'approved' ? 'approve' : 'reject'}`}
+                {busy ? 'Saving…' : `Yes, ${!isPending ? 'undo' : confirming === 'approved' ? 'approve' : 'reject'}`}
               </button>
             </div>
+          </div>
+        ) : !isPending ? (
+          <div className="en-actions">
+            <button type="button" className="en-btn en-btn--reject" onClick={() => onAsk('rejected')} disabled={busy}>
+              Undo approval
+            </button>
           </div>
         ) : (
           <div className="en-actions en-actions--split">

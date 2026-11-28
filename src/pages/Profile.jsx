@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
 import ProfileQr from '../components/ProfileQr'
 import { profileQrText } from '../utils/profileQr'
-import { computeGpa } from '../utils/grade'
+import { computeGpa, gpaStanding } from '../utils/grade'
 
 // Feedback opens the user's mail app (Gmail / Outlook) addressed to the team.
-const FEEDBACK_URL = 'mailto:01881250031@student.uph.edu?subject=Campus%20Portal%20Feedback'
+// Feedback goes to the project's public issue tracker, not to a personal mailbox.
+const FEEDBACK_URL = 'https://github.com/group-11-campusportal/Midterm_Project_Campus_Portal/issues'
 
 // Icons used by the Academic Services list (stroke icons, 24x24 grid).
 const ICONS = {
@@ -65,9 +66,7 @@ function Profile({ user, enrollments = [], grades = [] }) {
   const myGrades = grades.filter((g) => g.studentId === user.studentId)
   const myEnrollments = enrollments.filter((e) => e.studentId === user.studentId)
   const gpa = computeGpa(myGrades)
-  const standing = gpa <= 0 ? 'No grades recorded yet'
-    : gpa >= 3.5 ? "Dean's List · First Class Standing"
-      : gpa >= 3.0 ? 'Good Academic Standing' : 'Satisfactory Standing'
+  const standing = gpaStanding(gpa, myGrades.length)
   const approvedCredits = myEnrollments
     .filter((e) => e.status === 'approved')
     .reduce((sum, e) => sum + (e.credits || 0), 0)
@@ -138,7 +137,7 @@ function Profile({ user, enrollments = [], grades = [] }) {
             <section className="card card--elevated profile-summary">
               <div>
                 <span className="profile-summary__label">Cumulative GPA</span>
-                <span className="profile-summary__value">{gpa > 0 ? gpa.toFixed(2) : '—'}</span>
+                <span className="profile-summary__value">{myGrades.length > 0 ? gpa.toFixed(2) : '—'}</span>
                 <span className="profile-summary__hint">{standing}</span>
               </div>
               <div>
@@ -168,7 +167,7 @@ function Profile({ user, enrollments = [], grades = [] }) {
             <ul className="quick-services-list service-grid">
               <ServiceItem href="https://learn.uph.edu/" icon="book" tone="orange" name="LMS / Moodle" desc="Lecture slides & assignments" badge="External" />
               <ServiceItem href="https://library.uph.edu" icon="library" tone="blue" name="Digital Library" desc="Journals, e-books & research" badge="External" />
-              <ServiceItem href={FEEDBACK_URL} icon="chat" tone="green" name="Feedback" desc="Email us to help improve the Campus Portal" badge="Email" />
+              <ServiceItem href={FEEDBACK_URL} icon="chat" tone="green" name="Feedback" desc="Report a problem or an idea on GitHub" badge="External" />
               <ServiceItem href="https://teams.microsoft.com" icon="teams" tone="purple" name="Collaboration Tools" desc="Collaborate in Microsoft Teams" badge="External" />
             </ul>
           </section>

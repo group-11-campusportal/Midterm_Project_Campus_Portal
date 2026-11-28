@@ -1,12 +1,16 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { createClient } from '@libsql/client'
+import { ApiError } from './errors.js'
 
 // schema.sql is version 1 and is never edited again: production already has those tables.
 // Every later change is appended here as the next version, written as ALTER TABLE / CREATE so the
 // rows already in Turso are kept. Never edit or reorder an entry that has been deployed.
 // Example: { version: 2, sql: 'ALTER TABLE courses ADD COLUMN description TEXT' }
-export const migrations = []
+export const migrations = [
+  // v2: an admin can close a course offering for new requests. Existing courses stay open.
+  { version: 2, sql: 'ALTER TABLE courses ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1 CHECK (is_open IN (0, 1))' },
+]
 
 // libsql returns row objects that also carry numeric indexes; the API wants plain objects.
 function plain(result) {
@@ -76,7 +80,18 @@ async function upgrade(client, steps, from) {
 // One code path for both environments (Week 13, S52):
 //   development: { path }            -> a local SQLite file through libsql
 //   production:  { url, authToken }  -> the hosted Turso database
-export async function openDatabase({ url, authToken, path, migrations: steps = migrations } = {}) {
+// Rejects after ms so one hung network call cannot block the caller forever.
+function withTimeout(promise, ms) {
+  let timer
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new ApiError(503, 'DATABASE_BUSY',
+      'The database did not answer in time. Please try again.')), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+export async function openDatabase({ url, authToken, path, migrations: steps = migrations,
+  transactionTimeoutMs = 10000 } = {}) {
   if (!url) {
     if (!path) throw new Error('A database path or TURSO_DATABASE_URL is required.')
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true })
@@ -95,18 +110,30 @@ export async function openDatabase({ url, authToken, path, migrations: steps = m
     ...queries(client),
     // Runs work(tx) inside one write transaction: commit on success, roll back on any error.
     // Transactions are queued so two requests in this process never interleave their writes.
+    // Each one has a time limit, so a hung Turso call cannot stall every later write in the queue.
     transaction(work) {
       const result = queue.then(async () => {
-        const tx = await client.transaction('write')
-        try {
+        let tx
+        let abandoned = false
+        const run = (async () => {
+          tx = await client.transaction('write')
+          if (abandoned) throw new Error('Transaction abandoned after a timeout.')
           const value = await work(queries(tx))
+          // A request that already answered 503 must not commit its writes later.
+          if (abandoned) throw new Error('Transaction abandoned after a timeout.')
           await tx.commit()
           return value
+        })()
+        // After a timeout the late result is ignored, and the transaction is closed once it exists.
+        run.catch(() => {}).finally(() => { if (abandoned) tx?.close() })
+        try {
+          return await withTimeout(run, transactionTimeoutMs)
         } catch (error) {
-          await tx.rollback().catch(() => {})
+          if (error.code === 'DATABASE_BUSY') abandoned = true
+          if (tx) await withTimeout(tx.rollback(), 2000).catch(() => {})
           throw error
         } finally {
-          tx.close()
+          if (!abandoned) tx?.close()
         }
       })
       queue = result.catch(() => {})

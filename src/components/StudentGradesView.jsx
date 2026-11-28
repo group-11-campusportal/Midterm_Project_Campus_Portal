@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import StatusBadge from './StatusBadge'
-import { computeGpa } from '../utils/grade'
+import { computeGpa, gpaStanding } from '../utils/grade'
 
 // Student "My Grades" page. Same layout as the mobile Grades tab
 // (mobile-app/src/app/(tabs)/grades.js): hero with GPA / graded courses / graded credits,
@@ -156,10 +156,7 @@ function StudentGradesView({ user, enrollments, grades, successMessage, onSelect
 }
 
 function GpaCard({ gpa, totalCredits, count, terms }) {
-  const standing =
-    gpa >= 3.5 ? "Dean's List · First Class Standing"
-      : gpa >= 3.0 ? 'Good Academic Standing'
-        : 'Satisfactory Standing'
+  const standing = gpaStanding(gpa, count)
   return (
     <div className="sg-gpa">
       <div className="sg-gpa__left">

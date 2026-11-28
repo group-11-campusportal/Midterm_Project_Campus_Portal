@@ -34,7 +34,7 @@ export default function EditGradeSheet({ grade, onClose, onChanged }) {
 
   function save() {
     if (score === null) {
-      setError('Score must be a number between 0 and 100.')
+      setError('Score must be a number from 0 to 100, with at most 2 decimals.')
       return
     }
     run(() => api.updateGrade(grade.id, score), `Grade for ${grade.studentName} in ${grade.courseCode} updated to ${preview.letter}.`)

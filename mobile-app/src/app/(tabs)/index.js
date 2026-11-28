@@ -19,10 +19,12 @@ import { EmptyView, ErrorView, LoadingView } from '../../components/StateView'
 import { useAuth } from '../../context/AuthContext'
 import { api } from '../../lib/api'
 import { useApiList } from '../../lib/useApiList'
+import { gpaSummary } from '../../lib/grading'
+import { newestTerm } from '../../lib/terms'
 import { colors, font, gradients, minTap, radii, shadow, spacing } from '../../theme'
 
 export default function DashboardScreen() {
-  const { user, gpa, refreshMe } = useAuth()
+  const { user, gpa, gradedCount, refreshMe } = useAuth()
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const isStudent = user?.role !== 'administrator'
@@ -90,8 +92,8 @@ export default function DashboardScreen() {
     )
   }, [courses, searchQuery])
 
-  // A course can be requested only once — the API answers 409 for a second row — so a course
-  // that already has an enrollment shows its status instead of an Enroll button.
+  // A pending or approved request shows its status instead of an Enroll button. After a rejection
+  // the student may request again, so a rejected course is listed with the open ones.
   const enrollmentByCourse = useMemo(() => {
     const map = new Map()
     for (const enrollment of enrollments ?? []) map.set(enrollment.courseId, enrollment.status)
@@ -99,7 +101,7 @@ export default function DashboardScreen() {
   }, [enrollments])
 
   // Student catalog: approved courses live in the Enrollments tab, so they are left out here.
-  // Order: open courses first, then pending requests, rejected requests, and full courses last.
+  // Order: open courses first (including ones rejected before), then pending, then full or closed.
   const approvedCourseCount = useMemo(
     () => (enrollments ?? []).filter((e) => e.status === 'approved').length,
     [enrollments],
@@ -112,11 +114,10 @@ export default function DashboardScreen() {
     const rank = (course) => {
       const status = enrollmentByCourse.get(course.id)
       if (status === 'pending') return 1
-      if (status === 'rejected') return 2
-      if (course.enrolled >= course.capacity) return 3
+      if (course.isOpen === false || course.enrolled >= course.capacity) return 2
       return 0
     }
-    const labels = ['Available to enroll', 'Waiting for approval', 'Rejected requests', 'Full classes']
+    const labels = ['Available to enroll', 'Waiting for approval', 'Full or closed classes']
     const visible = filteredCourses
       .filter((course) => enrollmentByCourse.get(course.id) !== 'approved')
       .sort((a, b) => rank(a) - rank(b) || a.code.localeCompare(b.code))
@@ -151,8 +152,8 @@ export default function DashboardScreen() {
     ? new Set(enrollments.map((e) => e.studentId)).size
     : 0
 
-  const gpaDisplay =
-    gpa != null ? (typeof gpa === 'number' ? gpa.toFixed(2) : gpa) : '—'
+  const gpaInfo = gpaSummary(gpa, gradedCount)
+  const gpaDisplay = gpaInfo.text
 
   return (
     <>
@@ -261,7 +262,7 @@ export default function DashboardScreen() {
                   <StatCard
                     label="GPA"
                     value={gpaDisplay}
-                    hint={gpa == null ? 'No grades yet' : 'Weighted 4.0 scale'}
+                    hint={gpaInfo.hasGrades ? 'Weighted 4.0 scale' : 'No grades yet'}
                     color={colors.primary}
                     iconName="trophy"
                     iconColor={colors.purple}
@@ -403,6 +404,7 @@ export default function DashboardScreen() {
       <CourseFormSheet
         key={courseForm.id ?? 'new'}
         course={courseForm.id ? courseForm : null}
+        defaultTerm={newestTerm(courses ?? [])}
         onClose={() => setCourseForm(null)}
         onChanged={(message) => { setNotice(message); onRefresh() }}
       />

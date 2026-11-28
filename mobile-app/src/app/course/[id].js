@@ -164,8 +164,8 @@ export default function CourseDetailScreen() {
     ? 'You are already enrolled in this course.'
     : existingStatus === 'pending'
       ? 'You already have a pending enrollment request for this course.'
-      : existingStatus === 'rejected'
-        ? 'Your previous request for this course was rejected. Contact the registrar.'
+      : course?.isOpen === false
+        ? 'This course is closed for enrollment.'
         : isFull
           ? 'This course has reached maximum capacity.'
           : null
@@ -318,7 +318,9 @@ export default function CourseDetailScreen() {
                 icon={<Ionicons name="add-circle-outline" size={20} color="#ffffff" />}
               />
               <Text style={styles.footerHint}>
-                Sends a pending enrollment request to the registrar.
+                {existingStatus === 'rejected'
+                  ? 'Your earlier request was rejected. Sending again puts it back to pending for the registrar.'
+                  : 'Sends a pending enrollment request to the registrar.'}
               </Text>
             </>
           )

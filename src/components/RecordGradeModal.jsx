@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { toLetterGrade } from '../utils/grade'
+import { parseScore, toLetterGrade } from '../utils/grade'
 
 /**
  * Administrator: record a grade. Web version of the mobile Record Grade sheet
@@ -40,11 +40,7 @@ function RecordGradeModal({ students, enrollments, grades, onClose, onRecord, in
   const selectedStudent = students.find((s) => s.studentId === studentId) ?? null
   const selectedCourse = courseOptions.find((e) => e.id === enrollmentId) ?? null
 
-  const scoreValue = Number(scoreText.trim().replace(',', '.'))
-  const score =
-    scoreText.trim() !== '' && Number.isFinite(scoreValue) && scoreValue >= 0 && scoreValue <= 100
-      ? scoreValue
-      : null
+  const score = parseScore(scoreText)
   const preview = score === null ? null : toLetterGrade(score)
 
   function chooseStudent(id) {
@@ -76,7 +72,7 @@ function RecordGradeModal({ students, enrollments, grades, onClose, onRecord, in
     if (!studentId) next.student = 'Select a student.'
     else if (!enrollmentId) next.course = 'Select an approved course.'
     if (scoreText.trim() === '') next.score = 'Score is required.'
-    else if (score === null) next.score = 'Score must be a number between 0 and 100.'
+    else if (score === null) next.score = 'Score must be a number from 0 to 100, with at most 2 decimals.'
     setErrors(next)
     return Object.keys(next).length === 0
   }

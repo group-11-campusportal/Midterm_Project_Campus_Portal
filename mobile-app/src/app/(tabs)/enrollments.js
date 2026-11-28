@@ -37,6 +37,9 @@ export default function EnrollmentsScreen() {
   const { items, error, refreshing, reload, refresh } = useApiList(api.enrollments)
   // Seat counts for the administrator's decision (approved / capacity per course).
   const { items: courses, refresh: refreshCourses } = useApiList(api.courses)
+  // An approval can be undone only while the enrollment has no grade.
+  const { items: grades, refresh: refreshGrades } = useApiList(api.grades)
+  const gradedIds = useMemo(() => new Set((grades ?? []).map((g) => g.enrollmentId)), [grades])
   const [activeFilter, setActiveFilter] = useState('All')
   const [updatingId, setUpdatingId] = useState(null)
 
@@ -70,12 +73,13 @@ export default function EnrollmentsScreen() {
     .filter((e) => e.status === 'approved')
     .reduce((sum, e) => sum + (e.credits || 0), 0)
 
-  // Approve/reject cannot be undone from the app, so the registrar confirms first.
+  // Every decision is confirmed first. Undoing an approval frees the seat and marks it rejected.
   function confirmStatusChange(item, nextStatus) {
-    const verb = nextStatus === 'approved' ? 'Approve' : 'Reject'
+    const undo = item.status === 'approved'
+    const verb = undo ? 'Undo approval' : nextStatus === 'approved' ? 'Approve' : 'Reject'
     Alert.alert(
-      `${verb} request?`,
-      `${item.studentName} · ${item.courseCode} ${item.courseTitle}`,
+      undo ? 'Undo this approval?' : `${verb} request?`,
+      `${item.studentName} · ${item.courseCode} ${item.courseTitle}${undo ? '\nThe seat is freed and the request becomes rejected.' : ''}`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: verb, style: nextStatus === 'rejected' ? 'destructive' : 'default', onPress: () => handleStatusChange(item.id, nextStatus) },
@@ -139,7 +143,7 @@ export default function EnrollmentsScreen() {
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
-          onRefresh={refresh}
+          onRefresh={() => { refresh(); refreshCourses(); refreshGrades() }}
           tintColor={colors.primary}
         />
       }
@@ -255,6 +259,7 @@ export default function EnrollmentsScreen() {
           item={item}
           course={courseById.get(item.courseId)}
           busy={updatingId === item.id}
+          canUndo={item.status === 'approved' && grades !== null && !gradedIds.has(item.id)}
           onApprove={() => confirmStatusChange(item, 'approved')}
           onReject={() => confirmStatusChange(item, 'rejected')}
         />
@@ -302,7 +307,7 @@ export default function EnrollmentsScreen() {
 }
 
 // One request as the registrar sees it: who, which course, when, and whether a seat is free.
-function AdminRequestCard({ item, course, busy, onApprove, onReject }) {
+function AdminRequestCard({ item, course, busy, canUndo, onApprove, onReject }) {
   const isPending = item.status === 'pending'
   const seatsLeft = course ? Math.max(0, course.capacity - course.enrolled) : null
   return (
@@ -350,6 +355,18 @@ function AdminRequestCard({ item, course, busy, onApprove, onReject }) {
           >
             <Ionicons name="checkmark-circle" size={16} color={colors.success} />
             <Text style={styles.approveText}>Approve</Text>
+          </Pressable>
+        </View>
+      ) : canUndo ? (
+        <View style={styles.reqActions}>
+          <Pressable
+            onPress={onReject}
+            disabled={busy}
+            accessibilityLabel={`Undo approval for ${item.studentName}`}
+            style={({ pressed }) => [styles.actionBtn, styles.rejectBtn, styles.reqBtn, busy && { opacity: 0.5 }, pressed && styles.btnPressed]}
+          >
+            <Ionicons name="arrow-undo" size={16} color={colors.danger} />
+            <Text style={styles.rejectText}>Undo approval</Text>
           </Pressable>
         </View>
       ) : null}

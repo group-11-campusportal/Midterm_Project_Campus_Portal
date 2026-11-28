@@ -1,4 +1,5 @@
-# NOT USED: the API is deployed on Railway (see backend/README.md). Kept only as a record of the earlier Render plan.
+# ARCHIVED, NOT USED: the API is deployed on Railway (see backend/README.md). Moved here from the repo root
+# only as a record of the earlier Render plan; Render does not read it from this folder.
 # Render Blueprint for the Campus Portal API (Week 13, task A4).
 # The service lives in backend/. Secrets are typed into the Render dashboard, never committed.
 services:

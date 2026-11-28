@@ -7,7 +7,7 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import request from 'supertest'
 import { createClient } from '@libsql/client'
-import { openDatabase } from '../src/database.js'
+import { migrations, openDatabase } from '../src/database.js'
 import { seedDatabase } from '../src/seed.js'
 import { createApp } from '../src/app.js'
 import { issueToken } from '../src/auth.js'
@@ -247,9 +247,8 @@ test('full courses reject new requests and invalid approval transitions are reje
   const first = await enroll(course.id)
   await api('patch', `/enrollments/${first.id}/status`).send({ status: 'approved' }).expect(200)
   await api('post', '/enrollments', 'bella').send({ courseId: course.id }).expect(409)
-  for (const status of ['approved', 'rejected']) {
-    await api('patch', `/enrollments/${first.id}/status`).send({ status }).expect(409)
-  }
+  await api('patch', `/enrollments/${first.id}/status`).send({ status: 'approved' }).expect(409)
+  await api('patch', '/enrollments/e4/status').send({ status: 'approved' }).expect(409) // rejected stays rejected
   await api('patch', '/enrollments/e2/status').send({ status: 'pending' }).expect(400)
   await api('patch', '/enrollments/missing/status').send({ status: 'approved' }).expect(404)
 })
@@ -376,17 +375,24 @@ test('initialization is repeatable and refuses unknown schemas without overwriti
   const unchanged = createClient({ url: `file:${existing}` })
   assert.equal((await unchanged.execute('SELECT value FROM keep_me')).rows[0].value, 'saved')
   unchanged.close()
-  await db.run('UPDATE schema_version SET version = 2')
+  await db.run('UPDATE schema_version SET version = 99')
   await assert.rejects(openDatabase({ path: dbPath }), /Unsupported database schema/)
 })
 
 test('a Week 10 better-sqlite3 database (PRAGMA user_version = 1) is adopted without data loss', async () => {
+  // A real Week 10 file has the v1 tables only, so build one without the later migrations.
+  db.close()
+  const legacyPath = join(directory, 'legacy.db')
+  rmSync(legacyPath, { force: true })
+  db = await openDatabase({ path: legacyPath, migrations: [] })
+  await seedDatabase(db)
   await db.run('DROP TABLE schema_version')
   await db.run('PRAGMA user_version = 1')
   db.close()
-  db = await openDatabase({ path: dbPath })
-  assert.equal((await db.get('SELECT version FROM schema_version')).version, 1)
+  db = await openDatabase({ path: legacyPath })
+  assert.equal((await db.get('SELECT version FROM schema_version')).version, migrations.length + 1)
   assert.equal((await db.get('SELECT count(*) AS count FROM users')).count, 3)
+  assert.equal((await db.get("SELECT is_open FROM courses WHERE id = 'c1'")).is_open, 1)
 })
 
 test('configuration requires a secret, validates port/origin, and resolves DB paths from backend', () => {
@@ -415,4 +421,98 @@ test('configuration selects Turso only when its URL is set and accepts several C
   assert.equal(loadConfig({ JWT_SECRET: secret }).host, '127.0.0.1')
   assert.equal(loadConfig({ JWT_SECRET: secret, RENDER: 'true', TURSO_DATABASE_URL: 'libsql://x.turso.io', TURSO_AUTH_TOKEN: 't' }).database.url,
     'libsql://x.turso.io')
+})
+
+test('a rejected request can be made again and goes back to pending with the same id', async () => {
+  const course = await newCourse()
+  const first = await enroll(course.id)
+  await api('patch', `/enrollments/${first.id}/status`).send({ status: 'rejected' }).expect(200)
+  const again = await enroll(course.id)
+  assert.equal(again.id, first.id)
+  assert.equal(again.status, 'pending')
+  const conflict = await api('post', '/enrollments', 'andi').send({ courseId: course.id }).expect(409)
+  assert.match(conflict.body.error.message, /pending or approved/)
+})
+
+test('an approved enrollment without a grade can be changed to rejected, a graded one cannot', async () => {
+  const course = await newCourse()
+  const first = await enroll(course.id)
+  await api('patch', `/enrollments/${first.id}/status`).send({ status: 'approved' }).expect(200)
+  await api('patch', `/enrollments/${first.id}/status`).send({ status: 'rejected' }).expect(200)
+  assert.equal((await api('get', `/courses/${course.id}`).expect(200)).body.data.enrolled, 0)
+  await api('patch', '/enrollments/e1/status').send({ status: 'rejected' }).expect(409) // e1 is graded
+})
+
+test('credits lock once a course has a grade; other fields can still change', async () => {
+  const { id, enrolled: _enrolled, ...input } = (await api('get', '/courses/c1').expect(200)).body.data
+  const response = await api('put', `/courses/${id}`).send({ ...input, credits: input.credits + 1 }).expect(409)
+  assert.match(response.body.error.message, /Credits cannot change/)
+  await api('put', `/courses/${id}`).send({ ...input, title: 'Renamed' }).expect(200)
+})
+
+test('a closed course cannot be requested and keeps its flag when an update omits it', async () => {
+  const course = await newCourse({ isOpen: false })
+  assert.equal(course.isOpen, false)
+  const blocked = await api('post', '/enrollments', 'andi').send({ courseId: course.id }).expect(409)
+  assert.match(blocked.body.error.message, /closed/)
+  const updated = await api('put', `/courses/${course.id}`).send({ ...courseBody, title: 'Still closed' }).expect(200)
+  assert.equal(updated.body.data.isOpen, false)
+  const reopened = await api('put', `/courses/${course.id}`).send({ ...courseBody, isOpen: true }).expect(200)
+  assert.equal(reopened.body.data.isOpen, true)
+  await enroll(course.id)
+  await api('post', '/courses').send({ ...courseBody, code: 'CS998', isOpen: 'yes' }).expect(400)
+  assert.equal((await newCourse({ code: 'CS997' })).isOpen, true)
+})
+
+test('repeated failed logins are blocked with 429 and Retry-After; a success resets the count', async () => {
+  app = createApp({ db, secret, logger: (error) => { throw error }, limits: { login: { max: 3, windowMs: 60000 } } })
+  const login = (password) => request(app).post('/api/auth/login').send({ username: 'andi', password })
+  await login('student123').expect(200)
+  for (let i = 0; i < 2; i += 1) await login('wrong').expect(401)
+  await login('student123').expect(200) // resets
+  for (let i = 0; i < 3; i += 1) await login('wrong').expect(401)
+  const blocked = await login('student123').expect(429)
+  assert.equal(blocked.body.error.code, 'TOO_MANY_REQUESTS')
+  assert.ok(Number(blocked.headers['retry-after']) > 0)
+  await request(app).post('/api/auth/login').send({ username: 'bella', password: 'student123' }).expect(200)
+})
+
+test('a transaction that hangs is abandoned with 503 and never commits; later writes still run', async () => {
+  db.close()
+  db = await openDatabase({ path: dbPath, transactionTimeoutMs: 100 })
+  await assert.rejects(db.transaction(async (tx) => {
+    await tx.run("UPDATE courses SET title = 'late' WHERE id = 'c1'")
+    await new Promise((done) => setTimeout(done, 300))
+  }), (error) => error.status === 503 && error.code === 'DATABASE_BUSY')
+  await new Promise((done) => setTimeout(done, 300))
+  assert.notEqual((await db.get("SELECT title FROM courses WHERE id = 'c1'")).title, 'late')
+  await db.transaction((tx) => tx.run("UPDATE courses SET title = 'next' WHERE id = 'c1'"))
+  assert.equal((await db.get("SELECT title FROM courses WHERE id = 'c1'")).title, 'next')
+})
+
+test('scores accept up to two decimals and refuse more', async () => {
+  const course = await newCourse({ capacity: 3 })
+  const ids = []
+  for (const role of ['andi', 'bella']) {
+    const enrollment = await enroll(course.id, role)
+    await api('patch', `/enrollments/${enrollment.id}/status`).send({ status: 'approved' }).expect(200)
+    ids.push(enrollment.id)
+  }
+  const ok = await api('post', '/grades').send({ enrollmentId: ids[0], score: 84.75 }).expect(201)
+  assert.equal(ok.body.data.score, 84.75)
+  const refused = await api('post', '/grades').send({ enrollmentId: ids[1], score: 84.999 }).expect(400)
+  assert.match(refused.body.error.message, /2 decimal places/)
+  await api('put', `/grades/${ok.body.data.id}`).send({ score: 70.125 }).expect(400)
+  await api('put', `/grades/${ok.body.data.id}`).send({ score: 70.1 }).expect(200)
+})
+
+test('web and phone parse a typed score the same way as the API accepts it', async () => {
+  const { parseScore: webParse } = await import('../../src/utils/grade.js')
+  const { parseScore: phoneParse } = await import('../../mobile-app/src/lib/grading.js')
+  const cases = { '85': 85, '85,5': 85.5, '85.25': 85.25, ' 100 ': 100, '0': 0,
+    '85.255': null, '101': null, '-1': null, '': null, 'abc': null, '1e2': null }
+  for (const [text, expected] of Object.entries(cases)) {
+    assert.equal(webParse(text), expected, `web: ${text}`)
+    assert.equal(phoneParse(text), expected, `phone: ${text}`)
+  }
 })
