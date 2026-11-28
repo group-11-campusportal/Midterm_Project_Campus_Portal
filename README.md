@@ -41,7 +41,7 @@ They exist in every freshly **seeded local** database. Production was seeded onc
 set, so demo accounts can never be re-created there.
 
 A new student can also press **Sign up** on the web or phone login screen and choose only a username
-and password (`POST /api/auth/register`). The account is always a student; administrators are never
+and password (8+ characters, at least one capital letter and one special character) (`POST /api/auth/register`). The account is always a student; administrators are never
 created this way. One network can create 10 accounts per hour.
 
 10 wrong passwords for one username from the same network lock that login for 15 minutes. If a demo

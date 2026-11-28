@@ -51,8 +51,8 @@ function Login({ onLogin }) {
       if (form.username.trim() && !/^[a-z0-9._-]{3,30}$/i.test(form.username.trim())) {
         nextErrors.username = 'Use 3-30 letters, numbers, dots, dashes or underscores.'
       }
-      if (form.password && form.password.length < 8) {
-        nextErrors.password = 'Password must be at least 8 characters.'
+      if (form.password && !(form.password.length >= 8 && /[A-Z]/.test(form.password) && /[^A-Za-z0-9\s]/.test(form.password))) {
+        nextErrors.password = 'Use at least 8 characters, one capital letter and one special character (e.g. ! @ # ?).'
       }
       if (form.password !== form.confirm) {
         nextErrors.confirm = 'Passwords do not match.'
@@ -198,7 +198,7 @@ function Login({ onLogin }) {
                 autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 value={form.password}
                 onChange={handleChange}
-                placeholder={isSignUp ? 'At least 8 characters' : 'Your password'}
+                placeholder={isSignUp ? '8+ characters, 1 capital, 1 special' : 'Your password'}
                 disabled={isSubmitting}
               />
             </div>

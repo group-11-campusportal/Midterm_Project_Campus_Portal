@@ -182,7 +182,7 @@ bytes), `401 INVALID_CREDENTIALS` (same message whether the username or the pass
 **POST /api/auth/register** — student self sign-up. Request (only these two fields):
 
 ```json
-{ "username": "budi.santoso", "password": "at-least-8-chars" }
+{ "username": "budi.santoso", "password": "Campus!2026" }
 ```
 
 `201`: the same shape as login (`token`, `tokenType`, `expiresIn`, `user`), so the client is signed in
@@ -191,7 +191,8 @@ the server fills in the rest: `name` = username, `email` = `<username>@student.c
 `studentId` = `ST` + 10 random hex characters, `program` = `"Undeclared"`, `year` = `1`.
 
 Errors: `400 INVALID_INPUT` (username not 3–30 of `a-z 0-9 . _ -`, password under 8 characters or
-over 72 UTF-8 bytes, any extra field such as `role`), `409 CONFLICT` (username already taken, any
+over 72 UTF-8 bytes, password without a capital letter `A-Z` or without a special character, meaning
+anything other than a letter, digit or space, any extra field such as `role`), `409 CONFLICT` (username already taken, any
 letter case), `429 TOO_MANY_REQUESTS` (more than 10 sign-ups from one network per hour, with
 `Retry-After`).
 

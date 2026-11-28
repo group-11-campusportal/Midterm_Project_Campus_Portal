@@ -103,32 +103,34 @@ test('login rejects wrong credentials, SQL injection, missing fields, and role s
 
 test('sign-up creates a student that can log in and only sees their own rows', async () => {
   const response = await request(app).post('/api/auth/register')
-    .send({ username: ' Budi.S ', password: 'password123' }).expect(201)
+    .send({ username: ' Budi.S ', password: 'Password!23' }).expect(201)
   const { user, token } = response.body
   assert.equal(user.role, 'client')
   assert.equal(user.username, 'budi.s')
   assert.match(user.studentId, /^ST[0-9A-F]{10}$/)
   assert.equal(user.password_hash, undefined)
   const stored = await db.get('SELECT password_hash FROM users WHERE id = ?', [user.id])
-  assert.ok(bcrypt.compareSync('password123', stored.password_hash))
+  assert.ok(bcrypt.compareSync('Password!23', stored.password_hash))
   const me = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`).expect(200)
   assert.equal(me.body.gradedCount, 0)
   const own = await request(app).get('/api/enrollments').set('Authorization', `Bearer ${token}`).expect(200)
   assert.deepEqual(own.body.data, [])
   await request(app).get('/api/students').set('Authorization', `Bearer ${token}`).expect(403)
-  await request(app).post('/api/auth/login').send({ username: 'Budi.S', password: 'password123' }).expect(200)
+  await request(app).post('/api/auth/login').send({ username: 'Budi.S', password: 'Password!23' }).expect(200)
 })
 
 test('sign-up rejects taken usernames, bad input and role spoofing', async () => {
   for (const username of ['andi', 'ANDI', 'budi']) {
-    if (username === 'budi') await request(app).post('/api/auth/register').send({ username, password: 'password123' }).expect(201)
-    const taken = await request(app).post('/api/auth/register').send({ username, password: 'password123' }).expect(409)
+    if (username === 'budi') await request(app).post('/api/auth/register').send({ username, password: 'Password!23' }).expect(201)
+    const taken = await request(app).post('/api/auth/register').send({ username, password: 'Password!23' }).expect(409)
     assert.equal(taken.body.error.code, 'CONFLICT')
   }
-  for (const body of [{}, { username: 'ab', password: 'password123' }, { username: 'has space', password: 'password123' },
-    { username: 'carla', password: 'short' }, { username: 'carla', password: 'a'.repeat(73) },
-    { username: 12, password: 'password123' },
-    { username: 'carla', password: 'password123', role: 'administrator' }]) {
+  for (const body of [{}, { username: 'ab', password: 'Password!23' }, { username: 'has space', password: 'Password!23' },
+    { username: 'carla', password: 'short' }, { username: 'carla', password: 'A!' + 'a'.repeat(71) },
+    { username: 'carla', password: 'password!23' }, { username: 'carla', password: 'Password123' },
+    { username: 'carla', password: 'Pass word1' },
+    { username: 12, password: 'Password!23' },
+    { username: 'carla', password: 'Password!23', role: 'administrator' }]) {
     await request(app).post('/api/auth/register').send(body).expect(400)
   }
   assert.equal(await db.get("SELECT 1 FROM users WHERE username = 'carla'"), undefined)
@@ -137,9 +139,9 @@ test('sign-up rejects taken usernames, bad input and role spoofing', async () =>
 test('sign-ups are limited per network with 429', async () => {
   app = createApp({ db, secret, logger: (error) => { throw error }, limits: { register: { max: 2, windowMs: 60000 } } })
   for (const username of ['one1', 'two2']) {
-    await request(app).post('/api/auth/register').send({ username, password: 'password123' }).expect(201)
+    await request(app).post('/api/auth/register').send({ username, password: 'Password!23' }).expect(201)
   }
-  const blocked = await request(app).post('/api/auth/register').send({ username: 'three', password: 'password123' }).expect(429)
+  const blocked = await request(app).post('/api/auth/register').send({ username: 'three', password: 'Password!23' }).expect(429)
   assert.ok(Number(blocked.headers['retry-after']) > 0)
 })
 
