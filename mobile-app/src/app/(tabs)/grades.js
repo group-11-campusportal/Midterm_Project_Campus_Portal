@@ -359,7 +359,7 @@ function GradeRow({ grade, showStudent, onPress }) {
 }
 
 function GpaCard({ gpa, totalCredits, count, terms }) {
-  const { standing } = gpaSummary(gpa, count)
+  const { text, standing } = gpaSummary(gpa, count)
 
   return (
     <View style={[styles.gpaCard, shadow.sm]}>
@@ -373,7 +373,7 @@ function GpaCard({ gpa, totalCredits, count, terms }) {
         {terms ? <Text style={styles.gpaTerms}>Term {terms}</Text> : null}
       </View>
       <View style={styles.gpaRight}>
-        <Text style={styles.gpaValue}>{numeric.toFixed(2)}</Text>
+        <Text style={styles.gpaValue}>{text}</Text>
         <Text style={styles.gpaScale}>out of 4.00</Text>
       </View>
     </View>
