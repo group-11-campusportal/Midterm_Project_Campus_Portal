@@ -205,19 +205,23 @@ Rate limits are held in server memory, so a restart resets them.
 
 ## Deploy
 
-- **Web** — the canonical site is on Vercel. `main` is built with `VITE_API_URL` set to the Railway
-  origin (no trailing `/api`), because Vite bakes it into `dist/` at build time; on Vercel that value
-  lives in the project's environment variables. GitHub Actions (`.github/workflows/deploy.yml`) also
-  publishes the same build to `gh-pages` on every push to `main`, so the GitHub Pages URL is a mirror,
-  not the submitted site. If the API moves, update `VITE_API_URL` in Vercel **and** the repository
-  variable `API_URL` used by the workflow.
+- **Web** — the canonical site is Vercel at <https://midterm-project-campus-portal.vercel.app>
+  (project `web-dev-11/midterm-project-campus-portal`): root `.`, framework preset Vite
+  (`npm run build` → `dist`), Node 22.x, production branch `main`, so every merge deploys. `VITE_API_URL`
+  is a Vercel config variable for Production and Preview, set to the Railway origin with no `/api`,
+  because Vite bakes it into `dist/` at build time. GitHub Actions (`.github/workflows/deploy.yml`)
+  also publishes the same build to `gh-pages` on every push to `main`, so the GitHub Pages URL is a
+  mirror, not the submitted site. If the API moves, update `VITE_API_URL` in Vercel **and** the
+  repository variable `API_URL` used by the workflow.
 - **API** — Railway service, root `backend/`, `npm ci`, `npm start`, health check `/api/health`,
   secrets in Variables. `npm start` creates the tables and applies pending migrations; it **never
   seeds**. Auto-deploy is off: redeploy from the Deployments tab after a merge. Details:
   [`backend/README.md`](backend/README.md).
-- **CORS** — the API only accepts origins listed in `CORS_ORIGIN`. Both current origins
-  (`https://midterm-project-campus-portal.vercel.app` and `https://group-11-campusportal.github.io`)
-  are already allowed; a new web URL must be added there or every browser request fails.
+- **CORS** — the API only accepts origins listed in `CORS_ORIGIN`, and browsers can only call it from
+  those. The two production origins (`https://midterm-project-campus-portal.vercel.app` and
+  `https://group-11-campusportal.github.io`) are allowed; Vercel preview and team-alias URLs are not,
+  so they load but cannot log in. A new web URL must be added there and the service restarted, or
+  every browser request fails.
 
 Changing the schema: `src/schema.sql` is version 1 and is never edited again. A change is appended to
 `migrations` in `src/database.js` as the next version, and each pending step runs in its own
@@ -232,6 +236,7 @@ transaction together with the version bump.
 | Phone uses the old API URL | Metro cached the bundle | `npx expo start -c` |
 | First request slow, then fine | API cold start | retry; the clients already wait 20 s |
 | CORS error in the browser | the origin is missing from `CORS_ORIGIN` | add it and restart the API |
+| Preview or team-alias Vercel URL loads but login fails | only the canonical origins are listed in `CORS_ORIGIN` | open <https://midterm-project-campus-portal.vercel.app> instead |
 | `401` then a blank screen | expected: `apiFetch` cleared the token | check the login screen appeared |
 | `409` on a second enrollment | duplicate `(student_id, course_id)` | show the message, never retry blindly |
 | Phone cannot reach the API on Wi-Fi | `localhost` means the phone | LAN IP + `HOST=0.0.0.0`, USB `adb reverse`, or the Railway URL |
