@@ -218,10 +218,8 @@ Rate limits are held in server memory, so a restart resets them.
   seeds**. Auto-deploy is off: redeploy from the Deployments tab after a merge. Details:
   [`backend/README.md`](backend/README.md).
 - **CORS** — the API only accepts origins listed in `CORS_ORIGIN`, and browsers can only call it from
-  those. The two production origins (`https://midterm-project-campus-portal.vercel.app` and
-  `https://group-11-campusportal.github.io`) are allowed; Vercel preview and team-alias URLs are not,
-  so they load but cannot log in. A new web URL must be added there and the service restarted, or
-  every browser request fails.
+  those. The two production origins (`https://midterm-project-campus-portal.vercel.app` `https://midterm-project-campus-portal-web-dev-11.vercel.app` and
+  `https://group-11-campusportal.github.io`) are allowed;
 
 Changing the schema: `src/schema.sql` is version 1 and is never edited again. A change is appended to
 `migrations` in `src/database.js` as the next version, and each pending step runs in its own
