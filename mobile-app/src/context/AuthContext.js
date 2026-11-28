@@ -92,7 +92,7 @@ export function AuthProvider({ children }) {
     [startSession],
   )
   const signUp = useCallback(
-    async (username, password) => startSession(await api.register(username, password)),
+    async (username, email, password) => startSession(await api.register(username, email, password)),
     [startSession],
   )
 

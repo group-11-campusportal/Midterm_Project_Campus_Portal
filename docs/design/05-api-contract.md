@@ -179,21 +179,22 @@ Errors: `400 INVALID_INPUT` (missing field, `username` over 80 characters, `pass
 bytes), `401 INVALID_CREDENTIALS` (same message whether the username or the password was wrong),
 `400 INVALID_JSON`.
 
-**POST /api/auth/register** — student self sign-up. Request (only these two fields):
+**POST /api/auth/register** — student self sign-up. Request (only these three fields, all required):
 
 ```json
-{ "username": "budi.santoso", "password": "Campus!2026" }
+{ "username": "budi.santoso", "email": "budi.santoso@student.campus.edu", "password": "Campus!2026" }
 ```
 
 `201`: the same shape as login (`token`, `tokenType`, `expiresIn`, `user`), so the client is signed in
 right away. The account always has `role: "client"`. The username is trimmed and stored in lowercase;
-the server fills in the rest: `name` = username, `email` = `<username>@student.campus.edu`,
-`studentId` = `ST` + 10 random hex characters, `program` = `"Undeclared"`, `year` = `1`.
+`email` must end in `@student.campus.edu` and is stored in lowercase. The server fills in the rest:
+`name` = username, `studentId` = `ST` + 10 random hex characters, `program` = `"Undeclared"`, `year` = `1`.
 
-Errors: `400 INVALID_INPUT` (username not 3–30 of `a-z 0-9 . _ -`, password under 8 characters or
-over 72 UTF-8 bytes, password without a capital letter `A-Z` or without a special character, meaning
-anything other than a letter, digit or space, any extra field such as `role`), `409 CONFLICT` (username already taken, any
-letter case), `429 TOO_MANY_REQUESTS` (more than 10 sign-ups from one network per hour, with
+Errors: `400 INVALID_INPUT` (username not 3–30 of `a-z 0-9 . _ -`; email not ending in
+`@student.campus.edu`; password under 8 characters, over 72 UTF-8 bytes, without a capital letter
+`A-Z`, or without a special character, meaning anything other than a letter, digit or space; any extra
+field such as `role`), `409 CONFLICT` (username or email already taken, any letter case),
+`429 TOO_MANY_REQUESTS` (more than 10 sign-ups from one network per hour, with
 `Retry-After`).
 
 **GET /api/auth/me** — no body. `200` for a student:

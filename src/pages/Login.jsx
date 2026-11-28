@@ -14,7 +14,7 @@ function Login({ onLogin }) {
   // 'signin' uses an existing account; 'signup' creates a new student account.
   const [mode, setMode] = useState('signin')
   const isSignUp = mode === 'signup'
-  const [form, setForm] = useState({ username: '', password: '', confirm: '' })
+  const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' })
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -28,13 +28,13 @@ function Login({ onLogin }) {
 
   function switchMode() {
     setMode(isSignUp ? 'signin' : 'signup')
-    setForm({ username: '', password: '', confirm: '' })
+    setForm({ username: '', email: '', password: '', confirm: '' })
     setErrors({})
     setSubmitError('')
   }
 
   function fillDemo(acc) {
-    setForm({ username: acc.username, password: acc.password, confirm: '' })
+    setForm({ username: acc.username, email: '', password: acc.password, confirm: '' })
     setErrors({})
     setSubmitError('')
   }
@@ -48,6 +48,11 @@ function Login({ onLogin }) {
       nextErrors.password = 'Password is required.'
     }
     if (isSignUp) {
+      if (!form.email.trim()) {
+        nextErrors.email = 'University email is required.'
+      } else if (!/^[a-z0-9._%+-]+@student\.campus\.edu$/i.test(form.email.trim())) {
+        nextErrors.email = 'Use your university email ending in @student.campus.edu.'
+      }
       if (form.username.trim() && !/^[a-z0-9._-]{3,30}$/i.test(form.username.trim())) {
         nextErrors.username = 'Use 3-30 letters, numbers, dots, dashes or underscores.'
       }
@@ -77,6 +82,7 @@ function Login({ onLogin }) {
         method: 'POST',
         body: JSON.stringify({
           username: form.username.trim(),
+          ...(isSignUp ? { email: form.email.trim() } : {}),
           password: form.password,
         }),
       })
@@ -183,6 +189,31 @@ function Login({ onLogin }) {
               <span className="field__error">{errors.username}</span>
             ) : null}
           </div>
+
+          {isSignUp ? (
+            <div className="field">
+              <label htmlFor="email">University email</label>
+              <div className={`input-wrap ${errors.email ? 'input-wrap--error' : ''}`}>
+                <svg className="input-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <rect x="3" y="5" width="14" height="10" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M3.5 6l6.5 5 6.5-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  placeholder="name@student.campus.edu"
+                  disabled={isSubmitting}
+                />
+              </div>
+              {errors.email ? (
+                <span className="field__error">{errors.email}</span>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="field">
             <label htmlFor="password">Password</label>

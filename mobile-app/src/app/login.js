@@ -26,6 +26,7 @@ const DEMO_ACCOUNTS = [
 export default function LoginScreen() {
   const { signIn, signUp } = useAuth()
   const insets = useSafeAreaInsets()
+  const emailRef = useRef(null)
   const passwordRef = useRef(null)
   const confirmRef = useRef(null)
   // 'signin' uses an existing account; 'signup' creates a new student account.
@@ -33,6 +34,7 @@ export default function LoginScreen() {
   const isSignUp = mode === 'signup'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
   const [confirm, setConfirm] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState(apiUrlProblem())
@@ -42,6 +44,7 @@ export default function LoginScreen() {
     setMode(isSignUp ? 'signin' : 'signup')
     setUsername('')
     setPassword('')
+    setEmail('')
     setConfirm('')
     setFieldErrors({})
     setFormError(apiUrlProblem())
@@ -60,6 +63,10 @@ export default function LoginScreen() {
     if (!username.trim()) errors.username = 'Username is required.'
     if (!password) errors.password = 'Password is required.'
     if (isSignUp) {
+      if (!email.trim()) errors.email = 'University email is required.'
+      else if (!/^[a-z0-9._%+-]+@student\.campus\.edu$/i.test(email.trim())) {
+        errors.email = 'Use your university email ending in @student.campus.edu.'
+      }
       if (username.trim() && !/^[a-z0-9._-]{3,30}$/i.test(username.trim())) {
         errors.username = 'Use 3-30 letters, numbers, dots, dashes or underscores.'
       }
@@ -74,7 +81,8 @@ export default function LoginScreen() {
     setFormError(null)
     setIsSubmitting(true)
     try {
-      await (isSignUp ? signUp : signIn)(username.trim(), password)
+      if (isSignUp) await signUp(username.trim(), email.trim(), password)
+      else await signIn(username.trim(), password)
     } catch (error) {
       setFormError(
         !isSignUp && error.status === 401
@@ -165,7 +173,7 @@ export default function LoginScreen() {
                   placeholderTextColor={colors.mutedLight}
                   returnKeyType="next"
                   submitBehavior="submit"
-                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  onSubmitEditing={() => (isSignUp ? emailRef : passwordRef).current?.focus()}
                   editable={!isSubmitting}
                 />
               </View>
@@ -173,6 +181,35 @@ export default function LoginScreen() {
                 <Text style={styles.error}>{fieldErrors.username}</Text>
               ) : null}
             </View>
+
+            {isSignUp ? (
+              <View style={styles.field}>
+                <Text style={styles.label}>University email</Text>
+                <View style={[styles.inputWrap, fieldErrors.email && styles.inputErrorWrap]}>
+                  <Ionicons name="mail-outline" size={18} color={colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    ref={emailRef}
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    placeholder="name@student.campus.edu"
+                    placeholderTextColor={colors.mutedLight}
+                    returnKeyType="next"
+                    submitBehavior="submit"
+                    onSubmitEditing={() => passwordRef.current?.focus()}
+                    editable={!isSubmitting}
+                  />
+                </View>
+                {fieldErrors.email ? (
+                  <Text style={styles.error}>{fieldErrors.email}</Text>
+                ) : null}
+              </View>
+            ) : null}
 
             {/* Password Field with Left Icon */}
             <View style={styles.field}>

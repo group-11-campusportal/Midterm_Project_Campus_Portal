@@ -82,8 +82,8 @@ export async function apiFetch(
 export const api = {
   login: (username, password) =>
     apiFetch('/api/auth/login', { method: 'POST', body: { username, password }, auth: false }),
-  register: (username, password) =>
-    apiFetch('/api/auth/register', { method: 'POST', body: { username, password }, auth: false }),
+  register: (username, email, password) =>
+    apiFetch('/api/auth/register', { method: 'POST', body: { username, email, password }, auth: false }),
   me: () => apiFetch('/api/auth/me'),
   courses: () => apiFetch('/api/courses').then((r) => r.data),
   course: (id) => apiFetch(`/api/courses/${encodeURIComponent(id)}`).then((r) => r.data),
