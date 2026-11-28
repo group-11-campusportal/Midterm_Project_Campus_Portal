@@ -2,7 +2,7 @@
 
 Living status for Week 13 (S52 milestone: the API answers at a public URL with a hosted database, and
 both the web app and a phone on mobile data read from it). Updated by whoever merges the change.
-Status date: **24 November 2026**.
+Status date: **28 November 2026**.
 
 ## Done
 
@@ -10,6 +10,7 @@ Status date: **24 November 2026**.
 |---|---|---|
 | API | Express 5 + JWT API: health, login, me, students, courses, enrollments (create/approve/reject/withdraw), grades (create/update/delete), scoped by token | `backend/src/app.js`, `backend/test/api.test.js` (`npm test`) |
 | Database | One `@libsql/client` driver for a local SQLite file and Turso; schema v1 with FK rules, capacity checks, one grade per enrollment | `backend/src/schema.sql`, `backend/src/store.js` |
+| Hardening | Login limit (10 failures / 15 min per IP + username) and AI limit (5 / min per user) → `429` + `Retry-After`; 10 s transaction timeout → `503 DATABASE_BUSY`; migration v2 `courses.is_open`; scores refuse more than 2 decimals; the 31 audit items are fixed (PR #20) | `backend/src/limits.js`, `backend/src/database.js`, `docs/audit-checklist-2026-11-27.md`, 50 backend tests |
 | Seed | 3 accounts, 6 courses, 8 enrollments, 4 grades; seeding an already-filled database changes nothing | `backend/src/seed-data.js` |
 | Deploy | API on Railway with Turso; root `backend`, `npm ci` / `npm start`, health check `/api/health`, secrets in Railway Variables | `backend/README.md` |
 | Web | Real login, session restore from `localStorage`, all lists from the API, create enrollment, record grade, approve/reject with reload-safe status | `src/lib/api.js`, `src/App.jsx`, `src/pages/*` |
@@ -17,6 +18,7 @@ Status date: **24 November 2026**.
 | Mobile | Expo Router skeleton, `AuthProvider`, JWT in `expo-secure-store`, login/logout, dashboard, enrollments (admin approve/reject), grades, profile, pull-to-refresh, 401 → login | `mobile-app/src/` |
 | Mobile UX | Enrollment form: course picker as a modal, inline validation, 48 pt targets, submit in the thumb zone, one tap = one request | `mobile-app/src/app/enroll.js` |
 | Design tokens | Web-aligned `theme.js` (colors, spacing, radii, `minTap` 48) and `PrimaryButton` with busy/disabled state | `mobile-app/src/theme.js`, `mobile-app/src/components/PrimaryButton.js` |
+| CI | Every PR runs lint (web + `mobile-app/src`), the web build and the backend tests on Node 22 | `.github/workflows/ci.yml` |
 | Docs | Design Document §3 architecture, §4 data model, §5 API contract, §8 division of work; URLs page; AI feature plan; repo-wide agent rules | `docs/design/`, `README.md`, `AGENTS.md` |
 
 ## Next
@@ -41,11 +43,11 @@ Contact the API after deploying so nobody develops against a dead URL: `GET /api
 | # | Problem | Impact | Workaround / next step |
 |---|---|---|---|
 | 1 | Pages bundle built before 24 Nov calls `http://127.0.0.1:3000` | deployed web app cannot log in | fixed in `deploy.yml`; redeploy and check DevTools → Network |
-| 2 | Admin can record grades on web and phone (Grades → Record Grade), but cannot create/edit courses or edit/delete grades on either; no client uses the course CRUD routes | "manages courses" is not demonstrable | say so in the demo, do not claim it |
-| 3 | `src/data/*.js` is now unused dead data | misleading for a reviewer of checklist C | delete in a small `chore/web-remove-hardcoded-data` PR |
-| 4 | Hardcoded placeholder content on web and phone (term labels, "Dean's List", "84 / 144 SKS", tuition, UPH links) | numbers that do not come from the API | see the 24 Nov audit |
-| 5 | No login rate limit while demo passwords are public | brute force / demo account takeover if they exist in production | add a limiter; confirm production has no demo accounts |
-| 6 | No lint/format gate for `mobile-app/`; CI does not run backend tests | regressions reach `main` | add both to CI |
+| 2 | ~~Admin cannot create/edit courses or edit/delete grades~~ | — | fixed: both clients call the course CRUD and grade PUT/DELETE routes (`src/App.jsx`, `mobile-app/src/lib/api.js`) |
+| 3 | ~~`src/data/*.js` is unused dead data~~ | — | fixed: deleted in PR #20 |
+| 4 | ~~Hardcoded placeholder content on web and phone~~ | — | fixed in PR #20: terms come from the course data, credits are the real approved SKS, placeholder labels replaced. The UPH LMS and library links stay on purpose (real services) |
+| 5 | ~~No login rate limit~~ | demo accounts in production are still guessable within the limit | limiter added in PR #20; still confirm production has no demo accounts |
+| 6 | ~~No lint gate for `mobile-app/`; CI does not run backend tests~~ | — | fixed: `.github/workflows/ci.yml` (PR #20). Mobile changes from PR #20 are lint-checked but not yet run on a phone (see Next #4) |
 
 ## Decisions
 
@@ -59,6 +61,8 @@ Contact the API after deploying so nobody develops against a dead URL: `GET /api
 | 18 Nov | Phone stores the JWT in `expo-secure-store`, not `AsyncStorage` | encrypted keychain/keystore, survives an app restart, no plain-text token |
 | 18 Nov | Every API call goes through `apiFetch` (`src/lib/api.js`, `mobile-app/src/lib/api.js`) | one place for the Bearer header, the 401 handling and the error shape |
 | 18 Nov | Reusable UI (`theme.js`, `PrimaryButton`) instead of per-screen values | checklist D requires no hardcoded colors/spacing in screens |
+| 28 Nov | Scores with more than 2 decimals are refused, not rounded | rounding can silently change the letter grade |
+| 28 Nov | Rate limits are kept in memory, not in the database | the API is one Railway instance; a restart resetting counters is acceptable |
 
 ## Testing
 

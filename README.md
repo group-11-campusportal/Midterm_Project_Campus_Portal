@@ -28,6 +28,10 @@ Week 13 plan: [`docs/WEEK13_TEAM_WORKFLOW.md`](docs/WEEK13_TEAM_WORKFLOW.md)
 | Client (Student) | `andi` | `student123` |
 | Client (Student) | `bella` | `student123` |
 
+10 wrong passwords for one username from the same network lock that login for 15 minutes. If a demo
+login says "Too many failed sign-in attempts", wait or restart the API. The AI pages allow 5 requests
+per user per minute.
+
 ## Run it
 
 The API first, then the web app and/or the phone.
