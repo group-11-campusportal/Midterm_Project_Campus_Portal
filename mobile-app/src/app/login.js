@@ -63,7 +63,9 @@ export default function LoginScreen() {
       if (username.trim() && !/^[a-z0-9._-]{3,30}$/i.test(username.trim())) {
         errors.username = 'Use 3-30 letters, numbers, dots, dashes or underscores.'
       }
-      if (password && password.length < 8) errors.password = 'Password must be at least 8 characters.'
+      if (password && !(password.length >= 8 && /[A-Z]/.test(password) && /[^A-Za-z0-9\s]/.test(password))) {
+        errors.password = 'Use at least 8 characters, one capital letter and one special character (e.g. ! @ # ?).'
+      }
       if (password !== confirm) errors.confirm = 'Passwords do not match.'
     }
     setFieldErrors(errors)
@@ -196,7 +198,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoComplete={isSignUp ? 'new-password' : 'current-password'}
                   textContentType={isSignUp ? 'newPassword' : 'password'}
-                  placeholder={isSignUp ? 'At least 8 characters' : 'Your password'}
+                  placeholder={isSignUp ? '8+ characters, 1 capital, 1 special' : 'Your password'}
                   placeholderTextColor={colors.mutedLight}
                   returnKeyType={isSignUp ? 'next' : 'go'}
                   submitBehavior={isSignUp ? 'submit' : undefined}

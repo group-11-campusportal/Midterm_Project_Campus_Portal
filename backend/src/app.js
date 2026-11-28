@@ -93,8 +93,10 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
     if (typeof username !== 'string' || !/^[a-z0-9._-]{3,30}$/i.test(username.trim())) {
       badRequest('username must be 3-30 characters: letters, numbers, dot, dash or underscore.')
     }
-    if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
-      badRequest('password must be at least 8 characters and at most 72 UTF-8 bytes.')
+    // Sign-up only: existing accounts keep logging in with whatever password they have.
+    if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72
+      || !/[A-Z]/.test(password) || !/[^A-Za-z0-9\s]/.test(password)) {
+      badRequest('password must be 8-72 characters with at least one capital letter and one special character.')
     }
     const name = username.trim().toLowerCase()
     if (await db.get('SELECT 1 FROM users WHERE lower(username) = ?', [name])) {
