@@ -24,9 +24,10 @@ function constraintKind(error) {
   return match ? match[1].replace(' ', '') : null
 }
 
-// Failed logins per IP + username, and AI requests per signed-in user.
+// Failed logins per IP + username, sign-ups per IP, and AI requests per signed-in user.
 const defaultLimits = {
   login: { max: 10, windowMs: 15 * 60 * 1000 },
+  register: { max: 10, windowMs: 60 * 60 * 1000 },
   ai: { max: 5, windowMs: 60 * 1000 },
 }
 
@@ -40,6 +41,7 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
   const student = requireRole('client')
   const loginLimiter = createLimiter({ ...defaultLimits.login, ...limits.login })
   const aiLimiter = createLimiter({ ...defaultLimits.ai, ...limits.ai })
+  const registerLimiter = createLimiter({ ...defaultLimits.register, ...limits.register })
   app.disable('x-powered-by')
   // Behind Railway's proxy req.ip must come from X-Forwarded-For, or every user shares one IP.
   app.set('trust proxy', trustProxy)
@@ -79,6 +81,33 @@ export function createApp({ db, secret, origin = 'http://localhost:5173', logger
     }
     loginLimiter.reset(limitKey)
     res.json({ token: issueToken(user.id, secret), tokenType: 'Bearer', expiresIn: 3600, user: safeUser(user) })
+  })
+
+  // Self sign-up creates a student (client) only; administrators are never created here.
+  // Only username and password are asked; name, email and student ID are filled in for the student.
+  app.post('/api/auth/register', async (req, res) => {
+    fields(req.body, ['username', 'password'])
+    const wait = registerLimiter.retryAfter(req.ip)
+    if (wait) tooManyRequests(res, wait, `Too many sign-ups from this network. Try again in ${Math.ceil(wait / 60)} minute(s).`)
+    const { username, password } = req.body
+    if (typeof username !== 'string' || !/^[a-z0-9._-]{3,30}$/i.test(username.trim())) {
+      badRequest('username must be 3-30 characters: letters, numbers, dot, dash or underscore.')
+    }
+    if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+      badRequest('password must be at least 8 characters and at most 72 UTF-8 bytes.')
+    }
+    const name = username.trim().toLowerCase()
+    if (await db.get('SELECT 1 FROM users WHERE lower(username) = ?', [name])) {
+      conflict('This username is already taken.')
+    }
+    registerLimiter.hit(req.ip)
+    const id = `u-${randomUUID()}`
+    const studentId = `ST${randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`
+    await db.run(`INSERT INTO users (id, username, password_hash, role, name, email, student_id, program, year)
+      VALUES (?, ?, ?, 'client', ?, ?, ?, 'Undeclared', 1)`,
+    [id, name, await bcrypt.hash(password, 12), name, `${name}@student.campus.edu`, studentId])
+    const user = await store.user(id)
+    res.status(201).json({ token: issueToken(id, secret), tokenType: 'Bearer', expiresIn: 3600, user: safeUser(user) })
   })
 
   app.use('/api', authenticate(store, secret))

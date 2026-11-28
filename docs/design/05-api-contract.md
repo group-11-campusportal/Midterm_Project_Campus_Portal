@@ -12,7 +12,7 @@ and this page disagree, the code is the bug and the whole team changes together.
 | Base URL (deployed) | `https://midtermprojectcampusportal-production.up.railway.app` (`GET /` answers a JSON status) |
 | Prefix | every route starts with `/api` |
 | Request body | `application/json`, maximum 16 KB, only the fields listed below |
-| Auth | `Authorization: Bearer <token>` on every route except `GET /api/health` and `POST /api/auth/login` |
+| Auth | `Authorization: Bearer <token>` on every route except `GET /api/health`, `POST /api/auth/login` and `POST /api/auth/register` |
 | Token | JWT, HS256, subject = user id, issuer `campus-portal`, audience `campus-portal-clients`, **expires in 1 hour**, no refresh route — re-login when it expires |
 | Caching | every `/api` response carries `Cache-Control: no-store` |
 | Roles | `administrator` or `client` (a client is a student); read from the database on every request, never from the token |
@@ -155,6 +155,7 @@ database cannot be reached.
 | Method | Path | Who |
 |---|---|---|
 | POST | `/api/auth/login` | public |
+| POST | `/api/auth/register` | public (creates a student only) |
 | GET | `/api/auth/me` | any signed-in user |
 
 **POST /api/auth/login** — request:
@@ -177,6 +178,22 @@ database cannot be reached.
 Errors: `400 INVALID_INPUT` (missing field, `username` over 80 characters, `password` over 72 UTF-8
 bytes), `401 INVALID_CREDENTIALS` (same message whether the username or the password was wrong),
 `400 INVALID_JSON`.
+
+**POST /api/auth/register** — student self sign-up. Request (only these two fields):
+
+```json
+{ "username": "budi.santoso", "password": "at-least-8-chars" }
+```
+
+`201`: the same shape as login (`token`, `tokenType`, `expiresIn`, `user`), so the client is signed in
+right away. The account always has `role: "client"`. The username is trimmed and stored in lowercase;
+the server fills in the rest: `name` = username, `email` = `<username>@student.campus.edu`,
+`studentId` = `ST` + 10 random hex characters, `program` = `"Undeclared"`, `year` = `1`.
+
+Errors: `400 INVALID_INPUT` (username not 3–30 of `a-z 0-9 . _ -`, password under 8 characters or
+over 72 UTF-8 bytes, any extra field such as `role`), `409 CONFLICT` (username already taken, any
+letter case), `429 TOO_MANY_REQUESTS` (more than 10 sign-ups from one network per hour, with
+`Retry-After`).
 
 **GET /api/auth/me** — no body. `200` for a student:
 

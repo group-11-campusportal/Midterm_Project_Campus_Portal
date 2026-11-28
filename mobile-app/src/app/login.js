@@ -24,14 +24,28 @@ const DEMO_ACCOUNTS = [
 ]
 
 export default function LoginScreen() {
-  const { signIn } = useAuth()
+  const { signIn, signUp } = useAuth()
   const insets = useSafeAreaInsets()
   const passwordRef = useRef(null)
+  const confirmRef = useRef(null)
+  // 'signin' uses an existing account; 'signup' creates a new student account.
+  const [mode, setMode] = useState('signin')
+  const isSignUp = mode === 'signup'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState(apiUrlProblem())
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  function switchMode() {
+    setMode(isSignUp ? 'signin' : 'signup')
+    setUsername('')
+    setPassword('')
+    setConfirm('')
+    setFieldErrors({})
+    setFormError(apiUrlProblem())
+  }
 
   function fillDemo(acc) {
     setUsername(acc.username)
@@ -45,16 +59,23 @@ export default function LoginScreen() {
     const errors = {}
     if (!username.trim()) errors.username = 'Username is required.'
     if (!password) errors.password = 'Password is required.'
+    if (isSignUp) {
+      if (username.trim() && !/^[a-z0-9._-]{3,30}$/i.test(username.trim())) {
+        errors.username = 'Use 3-30 letters, numbers, dots, dashes or underscores.'
+      }
+      if (password && password.length < 8) errors.password = 'Password must be at least 8 characters.'
+      if (password !== confirm) errors.confirm = 'Passwords do not match.'
+    }
     setFieldErrors(errors)
     if (Object.keys(errors).length) return
 
     setFormError(null)
     setIsSubmitting(true)
     try {
-      await signIn(username.trim(), password)
+      await (isSignUp ? signUp : signIn)(username.trim(), password)
     } catch (error) {
       setFormError(
-        error.status === 401
+        !isSignUp && error.status === 401
           ? 'Invalid username or password. Check your credentials and try again.'
           : error.message,
       )
@@ -100,9 +121,11 @@ export default function LoginScreen() {
           {/* Sign In Card */}
           <View style={[styles.card, shadow.md]}>
             <View style={styles.cardHeader}>
-              <Text style={styles.formTitle}>Sign in</Text>
+              <Text style={styles.formTitle}>{isSignUp ? 'Create student account' : 'Sign in'}</Text>
               <Text style={styles.formSubtitle}>
-                Enter your university credentials to continue.
+                {isSignUp
+                  ? 'Choose a username and password. You can sign in with them right away.'
+                  : 'Enter your university credentials to continue.'}
               </Text>
             </View>
 
@@ -136,7 +159,7 @@ export default function LoginScreen() {
                   autoCorrect={false}
                   autoComplete="username"
                   textContentType="username"
-                  placeholder="e.g. admin or andi"
+                  placeholder={isSignUp ? 'e.g. budi.santoso' : 'e.g. admin or andi'}
                   placeholderTextColor={colors.mutedLight}
                   returnKeyType="next"
                   submitBehavior="submit"
@@ -171,12 +194,13 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry
                   autoCapitalize="none"
-                  autoComplete="current-password"
-                  textContentType="password"
-                  placeholder="Your password"
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  textContentType={isSignUp ? 'newPassword' : 'password'}
+                  placeholder={isSignUp ? 'At least 8 characters' : 'Your password'}
                   placeholderTextColor={colors.mutedLight}
-                  returnKeyType="go"
-                  onSubmitEditing={handleLogin}
+                  returnKeyType={isSignUp ? 'next' : 'go'}
+                  submitBehavior={isSignUp ? 'submit' : undefined}
+                  onSubmitEditing={isSignUp ? () => confirmRef.current?.focus() : handleLogin}
                   editable={!isSubmitting}
                 />
               </View>
@@ -185,17 +209,56 @@ export default function LoginScreen() {
               ) : null}
             </View>
 
+            {isSignUp ? (
+              <View style={styles.field}>
+                <Text style={styles.label}>Confirm password</Text>
+                <View style={[styles.inputWrap, fieldErrors.confirm && styles.inputErrorWrap]}>
+                  <Ionicons name="lock-closed-outline" size={18} color={colors.muted} style={styles.inputIcon} />
+                  <TextInput
+                    ref={confirmRef}
+                    style={styles.input}
+                    value={confirm}
+                    onChangeText={setConfirm}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoComplete="new-password"
+                    textContentType="newPassword"
+                    placeholder="Type the password again"
+                    placeholderTextColor={colors.mutedLight}
+                    returnKeyType="go"
+                    onSubmitEditing={handleLogin}
+                    editable={!isSubmitting}
+                  />
+                </View>
+                {fieldErrors.confirm ? (
+                  <Text style={styles.error}>{fieldErrors.confirm}</Text>
+                ) : null}
+              </View>
+            ) : null}
+
             <View style={styles.actionWrap}>
               <PrimaryButton
                 variant="gradient"
-                title={isSubmitting ? 'Signing in…' : 'Sign in to Portal'}
+                title={isSubmitting
+                  ? (isSignUp ? 'Creating account…' : 'Signing in…')
+                  : (isSignUp ? 'Create account' : 'Sign in to Portal')}
                 onPress={handleLogin}
                 busy={isSubmitting}
                 icon={<Ionicons name="arrow-forward" size={18} color="#ffffff" />}
               />
             </View>
 
+            <View style={styles.switchRow}>
+              <Text style={styles.switchText}>
+                {isSignUp ? 'Already have an account?' : 'New student?'}
+              </Text>
+              <Pressable onPress={switchMode} disabled={isSubmitting} hitSlop={12}>
+                <Text style={styles.switchLink}>{isSignUp ? 'Sign in' : 'Sign up'}</Text>
+              </Pressable>
+            </View>
+
             {/* Interactive Demo Accounts Tap-to-Fill */}
+            {isSignUp ? null : (
             <View style={styles.demoSection}>
               <View style={styles.demoHead}>
                 <Ionicons name="flash-outline" size={14} color={colors.primary} />
@@ -238,6 +301,7 @@ export default function LoginScreen() {
                 })}
               </View>
             </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -382,6 +446,14 @@ const styles = StyleSheet.create({
   },
   alertText: { fontSize: font.small, color: colors.danger, flex: 1, fontWeight: '500' },
   actionWrap: { marginTop: 4 },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  switchText: { fontSize: font.small, color: colors.muted },
+  switchLink: { fontSize: font.small, color: colors.primary, fontWeight: '800' },
   demoSection: {
     marginTop: spacing.xs,
     paddingTop: spacing.md,

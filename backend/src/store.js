@@ -39,7 +39,7 @@ export function createStore(db) {
 
   return {
     user: (id) => db.get('SELECT * FROM users WHERE id = ?', [id]),
-    userByUsername: (username) => db.get('SELECT * FROM users WHERE username = ?', [username]),
+    userByUsername: (username) => db.get('SELECT * FROM users WHERE lower(username) = lower(?)', [username]),
     students: async () => (await db.all("SELECT * FROM users WHERE role = 'client' ORDER BY student_id")).map(safeUser),
     courses: async () => (await db.all(`${courseSelect} ORDER BY c.code, c.term, c.id`)).map(publicCourse),
     course: async (id) => publicCourse(await db.get(`${courseSelect} WHERE c.id = ?`, [id])),
