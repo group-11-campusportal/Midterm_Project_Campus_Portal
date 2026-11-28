@@ -70,8 +70,8 @@ export function AuthProvider({ children }) {
     loadToken().then((token) => restore(token))
   }, [restore])
 
-  const signIn = useCallback(async (username, password) => {
-    const result = await api.login(username, password)
+  // Sign-up answers with the same { token, user } as login, so both start the session the same way.
+  const startSession = useCallback(async (result) => {
     await saveToken(result.token)
     await saveUser(result.user)
     setApiToken(result.token)
@@ -87,6 +87,15 @@ export function AuthProvider({ children }) {
     setStatus('signedIn')
   }, [])
 
+  const signIn = useCallback(
+    async (username, password) => startSession(await api.login(username, password)),
+    [startSession],
+  )
+  const signUp = useCallback(
+    async (username, password) => startSession(await api.register(username, password)),
+    [startSession],
+  )
+
   const refreshMe = useCallback(async () => {
     const me = await api.me()
     setUser(me.user)
@@ -96,8 +105,8 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ status, user, gpa, gradedCount, signIn, signOut: clearSession, clearSession, refreshMe, retry }),
-    [status, user, gpa, gradedCount, signIn, clearSession, refreshMe, retry],
+    () => ({ status, user, gpa, gradedCount, signIn, signUp, signOut: clearSession, clearSession, refreshMe, retry }),
+    [status, user, gpa, gradedCount, signIn, signUp, clearSession, refreshMe, retry],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

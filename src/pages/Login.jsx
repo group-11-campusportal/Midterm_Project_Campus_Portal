@@ -11,7 +11,10 @@ const DEMO_ACCOUNTS = [
 function Login({ onLogin }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const [form, setForm] = useState({ username: '', password: '' })
+  // 'signin' uses an existing account; 'signup' creates a new student account.
+  const [mode, setMode] = useState('signin')
+  const isSignUp = mode === 'signup'
+  const [form, setForm] = useState({ username: '', password: '', confirm: '' })
   const [errors, setErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -23,8 +26,15 @@ function Login({ onLogin }) {
     setSubmitError('')
   }
 
+  function switchMode() {
+    setMode(isSignUp ? 'signin' : 'signup')
+    setForm({ username: '', password: '', confirm: '' })
+    setErrors({})
+    setSubmitError('')
+  }
+
   function fillDemo(acc) {
-    setForm({ username: acc.username, password: acc.password })
+    setForm({ username: acc.username, password: acc.password, confirm: '' })
     setErrors({})
     setSubmitError('')
   }
@@ -36,6 +46,17 @@ function Login({ onLogin }) {
     }
     if (!form.password) {
       nextErrors.password = 'Password is required.'
+    }
+    if (isSignUp) {
+      if (form.username.trim() && !/^[a-z0-9._-]{3,30}$/i.test(form.username.trim())) {
+        nextErrors.username = 'Use 3-30 letters, numbers, dots, dashes or underscores.'
+      }
+      if (form.password && form.password.length < 8) {
+        nextErrors.password = 'Password must be at least 8 characters.'
+      }
+      if (form.password !== form.confirm) {
+        nextErrors.confirm = 'Passwords do not match.'
+      }
     }
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
@@ -52,7 +73,7 @@ function Login({ onLogin }) {
     setIsSubmitting(true)
 
     try {
-      const result = await apiFetch('/api/auth/login', {
+      const result = await apiFetch(isSignUp ? '/api/auth/register' : '/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({
           username: form.username.trim(),
@@ -65,7 +86,9 @@ function Login({ onLogin }) {
       const redirectTo = location.state?.from || '/dashboard'
       navigate(redirectTo, { replace: true })
     } catch (error) {
-      setSubmitError(error.message || 'Invalid username or password. Check your credentials and try again.')
+      setSubmitError(error.message || (isSignUp
+        ? 'Could not create the account. Try again.'
+        : 'Invalid username or password. Check your credentials and try again.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -120,9 +143,11 @@ function Login({ onLogin }) {
       <section className="auth__panel">
         <form className="auth__form" onSubmit={handleSubmit} noValidate>
           <div className="auth__form-head">
-            <h2 className="auth__title">Sign in</h2>
+            <h2 className="auth__title">{isSignUp ? 'Create student account' : 'Sign in'}</h2>
             <p className="auth__subtitle">
-              Enter your campus credentials to continue.
+              {isSignUp
+                ? 'Choose a username and password. You can sign in with them right away.'
+                : 'Enter your campus credentials to continue.'}
             </p>
           </div>
 
@@ -150,7 +175,7 @@ function Login({ onLogin }) {
                 autoComplete="username"
                 value={form.username}
                 onChange={handleChange}
-                placeholder="e.g. admin or andi"
+                placeholder={isSignUp ? 'e.g. budi.santoso' : 'e.g. admin or andi'}
                 disabled={isSubmitting}
               />
             </div>
@@ -170,10 +195,10 @@ function Login({ onLogin }) {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 value={form.password}
                 onChange={handleChange}
-                placeholder="Your password"
+                placeholder={isSignUp ? 'At least 8 characters' : 'Your password'}
                 disabled={isSubmitting}
               />
             </div>
@@ -182,16 +207,41 @@ function Login({ onLogin }) {
             ) : null}
           </div>
 
+          {isSignUp ? (
+            <div className="field">
+              <label htmlFor="confirm">Confirm password</label>
+              <div className={`input-wrap ${errors.confirm ? 'input-wrap--error' : ''}`}>
+                <svg className="input-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <rect x="4" y="9" width="12" height="8" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7 9V6a3 3 0 0 1 6 0v3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <input
+                  id="confirm"
+                  name="confirm"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.confirm}
+                  onChange={handleChange}
+                  placeholder="Type the password again"
+                  disabled={isSubmitting}
+                />
+              </div>
+              {errors.confirm ? (
+                <span className="field__error">{errors.confirm}</span>
+              ) : null}
+            </div>
+          ) : null}
+
           <button
             type="submit"
             className="btn btn--primary btn--gradient btn--block"
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              'Signing in…'
+              isSignUp ? 'Creating account…' : 'Signing in…'
             ) : (
               <>
-                <span>Sign in to Portal</span>
+                <span>{isSignUp ? 'Create account' : 'Sign in to Portal'}</span>
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
                   <path d="M4 10h12M11 5l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -199,7 +249,15 @@ function Login({ onLogin }) {
             )}
           </button>
 
+          <p className="auth__switch">
+            {isSignUp ? 'Already have an account?' : 'New student?'}{' '}
+            <button type="button" className="auth__switch-btn" onClick={switchMode} disabled={isSubmitting}>
+              {isSignUp ? 'Sign in' : 'Sign up'}
+            </button>
+          </p>
+
           {/* Quick Click-to-Fill Demo Accounts */}
+          {isSignUp ? null : (
           <div className="auth__demo">
             <div className="auth__demo-header">
               <span className="auth__demo-title">Quick Demo Sign In</span>
@@ -231,6 +289,7 @@ function Login({ onLogin }) {
               })}
             </div>
           </div>
+          )}
         </form>
       </section>
     </div>
